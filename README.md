@@ -5,6 +5,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.10.5-green.svg)](https://github.com/jlowin/fastmcp)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![MCP Badge](https://lobehub.com/badge/mcp/scooter-lacroix-sandbox-mcp)](https://lobehub.com/mcp/scooter-lacroix-sandbox-mcp)
 
 ## 🎬 Demo: Manim Animation in Action
 
