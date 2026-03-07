@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "hooks": [
+          {
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/tirith-security-guard-gemini.py\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "run_shell_command"
+      }
+    ]
+  },
+  "mcpServers": {
+    "tirith": {
+      "args": [
+        "mcp-server"
+      ],
+      "command": "tirith"
+    }
+  },
+  "context": {
+    "includeDirectories": [
+      "~/.maestro"
+    ]
+  }
+}

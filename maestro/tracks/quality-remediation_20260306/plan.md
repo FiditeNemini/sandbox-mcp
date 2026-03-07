@@ -93,12 +93,12 @@ Consolidate duplicate execution context and shared behavior into core
   - [x] Subtask: Create `src/sandbox/core/execution_services.py`
   - [x] Subtask: Move duplicate logic from both MCP servers
   - [x] Subtask: Update servers to use core services
-- [~] Task: Extract shared artifact services to core
-  - [ ] Subtask: Write failing tests for artifact service module
-  - [ ] Subtask: Create `src/sandbox/core/artifact_services.py`
-  - [ ] Subtask: Move artifact capture logic from servers
-  - [ ] Subtask: Update servers to use core artifact services
-- [ ] Task: Extract monkey-patching to core utilities
+- [x] Task: Extract shared artifact services to core
+  - [x] Subtask: Write failing tests for artifact service module
+  - [x] Subtask: Create `src/sandbox/core/artifact_services.py`
+  - [x] Subtask: Move artifact capture logic from servers
+  - [x] Subtask: Update servers to use core artifact services
+- [~] Task: Extract monkey-patching to core utilities
   - [ ] Subtask: Write failing tests for patching utilities
   - [ ] Subtask: Create `src/sandbox/core/patching.py`
   - [ ] Subtask: Move matplotlib/PIL patching from servers
