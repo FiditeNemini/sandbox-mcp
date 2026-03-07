@@ -102,11 +102,11 @@ Consolidate duplicate execution context and shared behavior into core
   - [x] Subtask: Write failing tests for patching utilities
   - [x] Subtask: Create `src/sandbox/core/patching.py`
   - [x] Subtask: Move matplotlib/PIL patching from servers
-- [~] Task: Fix SDK coupling to server implementation
-  - [ ] Subtask: Write failing tests for SDK independence from server
-  - [ ] Subtask: Remove ExecutionContext import from local_sandbox.py
-  - [ ] Subtask: Use core services instead
-- [ ] Task: Maestro - Phase Verification and Checkpoint 'Core Services Extraction' (Protocol in workflow.md)
+- [x] Task: Fix SDK coupling to server implementation
+  - [x] Subtask: Write failing tests for SDK independence from server
+  - [x] Subtask: Remove ExecutionContext import from local_sandbox.py
+  - [x] Subtask: Use core services instead
+- [x] Task: Maestro - Phase Verification and Checkpoint 'Core Services Extraction' (Protocol in workflow.md) [checkpoint: a9d642c]
 
 ---
 
