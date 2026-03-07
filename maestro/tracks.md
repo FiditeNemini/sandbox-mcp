@@ -4,10 +4,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [x] Track: Complete Remediation - Fix critical issues, add tests, refactor architecture, and establish CI/CD
+## [~] Track: Complete Remediation - Fix critical issues, add tests, refactor architecture, and establish CI/CD
 *Link: [./maestro/tracks/quality-remediation_20260306/](./maestro/tracks/quality-remediation_20260306/)*
 
-**Status:** COMPLETE with deferred items
+**Status:** IN PROGRESS - Phase 5 Server Refactoring (partially complete)
 
 **Completed:**
 - Fixed critical syntax errors
@@ -17,9 +17,12 @@ This file tracks all major tracks for the project. Each track has its own detail
 - Implemented WebExportService with security hardening (43 tests)
 - Established CI/CD quality gates
 
-**Deferred to future tracks:**
-- Tool registry extraction (attempted, created dead code, removed)
+**In Progress:**
+- Phase 5: Server Refactoring (web export done, tool registry/REPL/server refactor in progress)
+
+**Remaining:**
+- Tool registry extraction
 - REPL UX/help text module extraction
-- Stdio server refactoring (still 2727 lines)
+- Stdio server refactoring (2727 lines -> <500 lines target)
 - Full lazy imports implementation
 - E2E tests

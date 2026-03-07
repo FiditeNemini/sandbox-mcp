@@ -129,20 +129,18 @@ Split oversized stdio server into focused modules
   - [x] Subtask: Create `src/sandbox/server/web_export_service.py`
   - [x] Subtask: Move Flask/Streamlit logic from stdio server
 - [~] Task: Split MCP tool registration module
-  - [ ] Subtask: Write tests for tool registration
-  - [ ] Subtask: Create `src/sandbox/server/tool_registry.py`
-  - [ ] Subtask: Move FastMCP tool definitions
-  - Note: Attempted implementation created non-functional stub code; removed in ae98244
+  - [~] Subtask: Write tests for tool registration
+  - [~] Subtask: Create `src/sandbox/server/tool_registry.py`
+  - [~] Subtask: Move FastMCP tool definitions
 - [~] Task: Split REPL UX/help text module
-  - [ ] Subtask: Write tests for REPL helpers
-  - [ ] Subtask: Create `src/sandbox/server/repl_helpers.py`
-  - [ ] Subtask: Move REPL and magic command logic
+  - [~] Subtask: Write tests for REPL helpers
+  - [~] Subtask: Create `src/sandbox/server/repl_helpers.py`
+  - [~] Subtask: Move REPL and magic command logic
 - [~] Task: Refactor stdio server main file
-  - [ ] Subtask: Write tests for refactored stdio server
-  - [ ] Subtask: Reduce main file to imports and wiring only
-  - [ ] Subtask: Verify <500 lines for main file
-- [x] Task: Maestro - Phase Verification and Checkpoint 'Server Refactoring' (Protocol in workflow.md) [58ed589]
-  - Note: Phase partially complete; web export service done, tool registry/REPL/server refactor deferred
+  - [~] Subtask: Write tests for refactored stdio server
+  - [~] Subtask: Reduce main file to imports and wiring only
+  - [~] Subtask: Verify <500 lines for main file
+- [~] Task: Maestro - Phase Verification and Checkpoint 'Server Refactoring' (Protocol in workflow.md)
 
 ---
 
