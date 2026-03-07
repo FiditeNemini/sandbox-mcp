@@ -28,6 +28,18 @@ dependencies = [
 sandbox-server = "sandbox.mcp_sandbox_server:main"
 sandbox-server-stdio = "sandbox.mcp_sandbox_server_stdio:main"
 
+[project.optional-dependencies]
+web = [
+    "flask>=3.0.0",
+    "streamlit>=1.30.0",
+]
+dev = [
+    "black>=24.0.0",
+    "mypy>=1.8.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sandbox"]
 

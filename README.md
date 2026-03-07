@@ -2,7 +2,7 @@
 
 > Python sandbox execution environment with comprehensive MCP server support, featuring enhanced artifact management, interactive REPL, and Manim animation capabilities.
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.10.5-green.svg)](https://github.com/jlowin/fastmcp)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -75,7 +75,7 @@ uv run sandbox-server-stdio
 ## 📦 Installation
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.11+
 - uv (recommended) or pip
 
 ### Method 1: Direct Git Installation (Recommended)

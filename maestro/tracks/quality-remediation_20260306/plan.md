@@ -35,22 +35,22 @@ Fix blocking syntax errors and make package importable
 ### Goal
 Implement dependency extras and fix version inconsistencies
 
-- [ ] Task: Implement dependency extras structure
-  - [ ] Subtask: Write tests for optional extras imports
-  - [ ] Subtask: Add `[project.optional-dependencies]` with `web`, `sdk-remote`, `dev`
-  - [ ] Subtask: Move Flask/Streamlit to `web` extra
-  - [ ] Subtask: Verify core works without optional deps
-- [ ] Task: Fix version inconsistencies across files
-  - [ ] Subtask: Write tests for version constant
-  - [ ] Subtask: Create single source of truth in pyproject.toml
-  - [ ] Subtask: Update `__init__.py` to read version from package
-  - [ ] Subtask: Update SDK `__init__.py` to read version
-  - [ ] Subtask: Verify all versions match
-- [ ] Task: Update README/docs for Python version consistency
-  - [ ] Subtask: Document Python 3.11+ requirement (not 3.9+)
-  - [ ] Subtask: Remove or qualify undocumented features (Flask/Streamlit)
-  - [ ] Subtask: Add supported feature matrix to README
-- [ ] Task: Maestro - Phase Verification and Checkpoint 'Dependency & Packaging Architecture' (Protocol in workflow.md)
+- [x] Task: Implement dependency extras structure
+  - [x] Subtask: Write tests for optional extras imports
+  - [x] Subtask: Add `[project.optional-dependencies]` with `web`, `sdk-remote`, `dev`
+  - [x] Subtask: Move Flask/Streamlit to `web` extra
+  - [x] Subtask: Verify core works without optional deps
+- [x] Task: Fix version inconsistencies across files
+  - [x] Subtask: Write tests for version constant
+  - [x] Subtask: Create single source of truth in pyproject.toml
+  - [x] Subtask: Update `__init__.py` to read version from package
+  - [x] Subtask: Update SDK `__init__.py` to read version
+  - [x] Subtask: Verify all versions match
+- [x] Task: Update README/docs for Python version consistency
+  - [x] Subtask: Document Python 3.11+ requirement (not 3.9+)
+  - [x] Subtask: Remove or qualify undocumented features (Flask/Streamlit)
+  - [x] Subtask: Add supported feature matrix to README
+- [~] Task: Maestro - Phase Verification and Checkpoint 'Dependency & Packaging Architecture' (Protocol in workflow.md)
 
 ---
 
