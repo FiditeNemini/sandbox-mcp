@@ -125,9 +125,9 @@ Split oversized stdio server into focused modules
   - [x] Subtask: Create `src/sandbox/server/artifact_service.py`
   - [x] Subtask: Move artifact logic from stdio server
 - [~] Task: Split web export service module
-  - [ ] Subtask: Write tests for web export service
-  - [ ] Subtask: Create `src/sandbox/server/web_export_service.py`
-  - [ ] Subtask: Move Flask/Streamlit logic from stdio server
+  - [~] Subtask: Write tests for web export service
+  - [~] Subtask: Create `src/sandbox/server/web_export_service.py`
+  - [~] Subtask: Move Flask/Streamlit logic from stdio server
 - [ ] Task: Split MCP tool registration module
   - [ ] Subtask: Write tests for tool registration
   - [ ] Subtask: Create `src/sandbox/server/tool_registry.py`
