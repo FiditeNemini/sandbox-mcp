@@ -59,27 +59,27 @@ Implement dependency extras and fix version inconsistencies
 ### Goal
 Build comprehensive test suite with TDD
 
-- [ ] Task: MCP server startup smoke test
-  - [ ] Subtask: Write test for stdio server initialization
-  - [ ] Subtask: Write test for HTTP server initialization
-  - [ ] Subtask: Verify FastMCP tool registration
-- [ ] Task: Local execution happy path test
-  - [ ] Subtask: Write test for basic code execution
-  - [ ] Subtask: Write test for stdout capture
-  - [ ] Subtask: Write test for stderr capture
-- [ ] Task: Artifact capture tests
-  - [ ] Subtask: Write test for matplotlib plot capture
-  - [ ] Subtask: Write test for PIL image capture
-  - [ ] Subtask: Write test for artifact categorization
-- [ ] Task: Security filter behavior tests
-  - [ ] Subtask: Write test for dangerous command blocking
-  - [ ] Subtask: Write test for directory access restrictions
-  - [ ] Subtask: Write test for resource limit enforcement
-- [ ] Task: Regression tests for execution context
-  - [ ] Subtask: Write test for session state persistence
-  - [ ] Subtask: Write test for globals_dict serialization
-  - [ ] Subtask: Write test for execution history storage
-- [ ] Task: Maestro - Phase Verification and Checkpoint 'Test Infrastructure' (Protocol in workflow.md)
+- [x] Task: MCP server startup smoke test
+  - [x] Subtask: Write test for stdio server initialization
+  - [x] Subtask: Write test for HTTP server initialization
+  - [x] Subtask: Verify FastMCP tool registration
+- [x] Task: Local execution happy path test
+  - [x] Subtask: Write test for basic code execution
+  - [x] Subtask: Write test for stdout capture
+  - [x] Subtask: Write test for stderr capture
+- [x] Task: Artifact capture tests
+  - [x] Subtask: Write test for matplotlib plot capture
+  - [x] Subtask: Write test for PIL image capture
+  - [x] Subtask: Write test for artifact categorization
+- [x] Task: Security filter behavior tests
+  - [x] Subtask: Write test for dangerous command blocking
+  - [x] Subtask: Write test for directory access restrictions
+  - [x] Subtask: Write test for resource limit enforcement
+- [x] Task: Regression tests for execution context
+  - [x] Subtask: Write test for session state persistence (covered in test_local_execution.py)
+  - [x] Subtask: Write test for globals_dict serialization (covered in test_local_execution.py)
+  - [x] Subtask: Write test for execution history storage (covered in test_local_execution.py)
+- [~] Task: Maestro - Phase Verification and Checkpoint 'Test Infrastructure' (Protocol in workflow.md)
 
 ---
 
