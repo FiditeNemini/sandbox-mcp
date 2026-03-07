@@ -10,7 +10,10 @@ Security Features:
 - Symlink attack prevention
 - Docker image name sanitization
 - Thread-safe singleton initialization
+- Disk space validation to prevent DoS attacks
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -21,7 +24,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List, TypedDict, Callable
+from typing import Dict, Any, Optional, List, TypedDict, Callable, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,11 @@ MAX_CODE_SIZE = 10 * 1024 * 1024  # 10 MB max code size
 MAX_EXPORT_NAME_LENGTH = 100
 DOCKER_BUILD_TIMEOUT = 1800  # 30 minutes
 DOCKER_IMAGE_NAME_MAX_LENGTH = 128
+
+# Disk space constants
+MIN_FREE_SPACE_BYTES = 100 * 1024 * 1024  # 100 MB minimum free space
+MAX_EXPORT_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB max per export (including overhead)
+DISK_USAGE_WARNING_PERCENT = 90  # Warn when disk usage exceeds this
 
 
 class ExportResult(TypedDict, total=False):
@@ -78,6 +86,69 @@ class WebExportService:
         self.artifacts_dir = artifacts_dir
         self._lock = threading.RLock()
         self._docker_available: Optional[bool] = None
+
+    def _check_disk_space(self, directory: Path, required_bytes: int) -> Tuple[bool, str]:
+        """
+        Check if sufficient disk space is available for export.
+
+        Args:
+            directory: Directory to check space for
+            required_bytes: Required free space in bytes
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        try:
+            # Get disk usage statistics
+            usage = shutil.disk_usage(str(directory))
+
+            # Check if we have enough free space
+            if usage.free < required_bytes:
+                free_mb = usage.free / (1024 * 1024)
+                required_mb = required_bytes / (1024 * 1024)
+                return False, (
+                    f"Insufficient disk space. "
+                    f"Free: {free_mb:.1f}MB, Required: {required_mb:.1f}MB"
+                )
+
+            # Check if disk usage is critically high
+            total_percent_used = (usage.used / usage.total) * 100
+            if total_percent_used > DISK_USAGE_WARNING_PERCENT:
+                return False, (
+                    f"Disk usage critical ({total_percent_used:.1f}%). "
+                    f"Please free up space before creating exports."
+                )
+
+            return True, "OK"
+
+        except OSError as e:
+            logger.error(f"Failed to check disk space: {e}")
+            return False, f"Unable to check disk space: {e}"
+
+    def _estimate_export_size(self, code: str, app_type: str) -> int:
+        """
+        Estimate export size in bytes before creation.
+
+        Args:
+            code: Application code
+            app_type: Type of application ('flask' or 'streamlit')
+
+        Returns:
+            Estimated size in bytes
+        """
+        # Base file sizes (approximate)
+        REQUIREMENTS_SIZE = 50  # requirements.txt
+        DOCKERFILE_SIZE = 250  # Dockerfile
+        COMPOSE_SIZE = 200  # docker-compose.yml
+        README_SIZE = 600  # README.md
+
+        # Code size (will be written to app.py)
+        code_size = len(code.encode('utf-8'))
+
+        # Overhead for directory entries, metadata
+        OVERHEAD = 2048
+
+        return REQUIREMENTS_SIZE + DOCKERFILE_SIZE + COMPOSE_SIZE + README_SIZE + code_size + OVERHEAD
 
     def _sanitize_export_name(self, export_name: str) -> str:
         """
@@ -277,6 +348,26 @@ class WebExportService:
                 'error': 'No artifacts directory configured'
             }
 
+        # Check disk space BEFORE creating anything (DoS prevention)
+        estimated_size = self._estimate_export_size(code, app_type)
+        
+        # Check if estimated export size exceeds maximum
+        if estimated_size > MAX_EXPORT_SIZE_BYTES:
+            return {
+                'success': False,
+                'error': f'Export size exceeds maximum ({MAX_EXPORT_SIZE_BYTES / (1024 * 1024):.0f}MB limit)'
+            }
+        
+        # Check if we have enough free space (export size + minimum free buffer)
+        required_space = estimated_size + MIN_FREE_SPACE_BYTES
+        space_ok, space_message = self._check_disk_space(exports_dir, required_space)
+        if not space_ok:
+            return {
+                'success': False,
+                'error': space_message,
+                'estimated_size': estimated_size
+            }
+
         # Generate unique export ID and name
         export_id = str(uuid.uuid4())[:8]
         final_export_name = sanitized_export_name or f"{app_type}_app_{export_id}"
@@ -284,7 +375,7 @@ class WebExportService:
         # Handle name collisions with atomic directory creation
         export_dir = exports_dir / final_export_name
         collision_counter = 0
-        
+
         # Atomic directory creation to prevent race conditions
         while True:
             try:

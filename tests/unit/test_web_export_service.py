@@ -550,12 +550,102 @@ class TestWebExportServiceSecurity:
         from sandbox.server.web_export_service import WebExportService
 
         service = WebExportService(artifacts_dir=temp_artifacts_dir)
-        
+
         # Try path traversal
         result = service.build_docker_image("../../../etc/passwd")
-        
+
         # Should fail due to validation
         assert result['status'] == 'error'
+
+
+class TestWebExportServiceDiskSpace:
+    """Test disk space validation for DoS prevention."""
+
+    @pytest.fixture
+    def temp_artifacts_dir(self):
+        """Create a temporary artifacts directory for testing."""
+        temp_dir = tempfile.mkdtemp()
+        yield Path(temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_check_disk_space_sufficient(self, temp_artifacts_dir):
+        """Test disk space check passes when space available."""
+        from sandbox.server.web_export_service import WebExportService
+
+        service = WebExportService(artifacts_dir=temp_artifacts_dir)
+
+        ok, message = service._check_disk_space(temp_artifacts_dir, 1024)
+        assert ok is True
+        assert message == "OK"
+
+    def test_check_disk_space_insufficient(self, temp_artifacts_dir):
+        """Test disk space check fails when space insufficient."""
+        from sandbox.server.web_export_service import WebExportService
+
+        service = WebExportService(artifacts_dir=temp_artifacts_dir)
+
+        # Request impossibly large space (1PB)
+        ok, message = service._check_disk_space(
+            temp_artifacts_dir,
+            1024 * 1024 * 1024 * 1024 * 1024
+        )
+        assert ok is False
+        assert "Insufficient disk space" in message
+
+    def test_estimate_export_size(self, temp_artifacts_dir):
+        """Test export size estimation."""
+        from sandbox.server.web_export_service import WebExportService
+
+        service = WebExportService(artifacts_dir=temp_artifacts_dir)
+
+        # Small code
+        small_code = "print('hello')"
+        size = service._estimate_export_size(small_code, 'flask')
+        assert size > 0
+        assert size < 10000  # Should be small
+
+        # Large code
+        large_code = "x = '" + "A" * 10000 + "'"
+        large_size = service._estimate_export_size(large_code, 'flask')
+        assert large_size > size  # Larger code = larger estimate
+
+    def test_export_fails_on_insufficient_space(self, temp_artifacts_dir, monkeypatch):
+        """Test export fails gracefully when disk space insufficient."""
+        from sandbox.server.web_export_service import WebExportService
+        import shutil
+
+        service = WebExportService(artifacts_dir=temp_artifacts_dir)
+
+        # Mock disk_usage to report critically high usage (95%)
+        # But enough free space to pass the size check
+        mock_usage = type('Usage', (), {
+            'total': 10000000000,  # 10GB total
+            'used': 9500000000,    # 9.5GB used (95%)
+            'free': 500000000      # 500MB free (enough for export, but triggers 90% warning)
+        })()
+
+        monkeypatch.setattr(shutil, 'disk_usage', lambda p: mock_usage)
+
+        result = service.export_flask_app("print('hello')", export_name="test")
+
+        assert result['success'] is False
+        assert 'Disk usage critical' in result['error']
+        assert 'estimated_size' in result
+
+    def test_export_size_limit_enforced(self, temp_artifacts_dir):
+        """Test that export size limit is enforced."""
+        from sandbox.server.web_export_service import WebExportService, MAX_EXPORT_SIZE_BYTES
+
+        service = WebExportService(artifacts_dir=temp_artifacts_dir)
+
+        # Create code that would exceed limit when estimated
+        # The estimate adds ~1KB overhead, so we need code close to the limit
+        huge_code = "x = '" + "A" * (MAX_EXPORT_SIZE_BYTES - 5000) + "'"
+
+        result = service.export_flask_app(huge_code, export_name="huge_test")
+
+        assert result['success'] is False
+        assert 'exceeds maximum' in result['error']
 
 
 @pytest.mark.asyncio
@@ -574,25 +664,25 @@ class TestWebExportServiceIntegration:
         from sandbox.server.web_export_service import WebExportService
 
         service = WebExportService(artifacts_dir=temp_artifacts_dir)
-        
+
         # Create export
         flask_code = "from flask import Flask\napp = Flask(__name__)\n@app.route('/')\ndef hello():\n    return 'Hello'"
         export_result = service.export_flask_app(flask_code, export_name="lifecycle_test")
         assert export_result['success'] is True
-        
+
         # List exports
         list_result = service.list_web_app_exports()
         assert list_result['total_exports'] == 1
-        
+
         # Get details
         details_result = service.get_export_details("lifecycle_test")
         assert details_result['status'] == 'success'
         assert 'app.py' in details_result['export_info']['files']
-        
+
         # Cleanup
         cleanup_result = service.cleanup_web_app_export("lifecycle_test")
         assert cleanup_result['status'] == 'success'
-        
+
         # Verify cleanup
         final_list = service.list_web_app_exports()
         assert final_list['total_exports'] == 0
