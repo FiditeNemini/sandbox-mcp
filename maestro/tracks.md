@@ -7,7 +7,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 ## [~] Track: Complete Remediation - Fix critical issues, add tests, refactor architecture, and establish CI/CD
 *Link: [./maestro/tracks/quality-remediation_20260306/](./maestro/tracks/quality-remediation_20260306/)*
 
-**Status:** IN PROGRESS - Phase 10: Tzar Review Remediation
+**Status:** IN PROGRESS - Phase 10: Tzar Review Remediation (Tier 0: 1/3 tasks complete)
 
 **Completed Phases:**
 - Phase 1: Critical Syntax & Runtime Fixes [d94b818]
@@ -20,17 +20,29 @@ This file tracks all major tracks for the project. Each track has its own detail
 - Phase 8: CI/CD Infrastructure [a4c3c01]
 - Phase 9: Final Verification & Documentation [5dd9b4c]
 
+**Phase 10 Progress (Tzar Review Remediation):**
+- Tier 0: Architecture Blockers (MUST FIX FIRST)
+  - ✅ Task A1: Consolidate duplicate execution context implementations [534b091]
+  - ⏳ Task A2: Eliminate legacy HTTP/server divergence (NEXT)
+  - ⏳ Task T1: Implement per-session process isolation
+- Tier 1: Security Blockers (BLOCKED ON TIER 0)
+  - ⏳ Tasks S1-S5: Security fixes
+- Tier 2-5: Pending architecture blocker completion
+
 **Key Achievements:**
-- 271 tests passing (2 skipped) - up from 0
+- 315 tests passing (2 skipped) - up from 0
 - stdio server: 2727 → 302 lines
 - Fixed critical syntax error in code_validator.py
 - Added missing aiohttp dependency
 - Fixed version inconsistency (reads from package metadata)
-- Extracted core services (ExecutionContextService, ArtifactService, PatchManager)
+- Extracted core services (ExecutionContextService, ArtifactService, PatchManager, PathValidator)
 - Decoupled SDK from server implementation
 - WebExportService with security hardening (43 tests)
 - Lazy imports for optional features (22 tests)
 - Security documentation updated (guarded execution, pickle warnings)
 - CI/CD: docs consistency checks, E2E tests (15 tests)
+- **Phase 10 A1:** Both transports now use shared ExecutionContext from core.execution_services
+- **Phase 10 A1:** Eliminated 200+ lines of duplicate code from stdio server
+- **Phase 10 A1:** Eliminated duplicate ExecutionContext from HTTP server
 
 **Known Limitations:** None - All identified limitations have been resolved.
