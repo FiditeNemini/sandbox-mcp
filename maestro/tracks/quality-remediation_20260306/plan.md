@@ -322,7 +322,7 @@ Ensure all acceptance criteria met and document improvements
     - Tests check for no duplicate classes or functions
 
 - [~] Task: T1 — Implement per-session process isolation [IN PROGRESS]
-  - [x] Subtask: Write failing integration coverage for concurrent isolated sessions with separate cwd, env, globals, and artifacts [COMPLETED - TDD RED PHASE]
+  - [ ] Subtask: Write failing integration coverage for concurrent isolated sessions with separate cwd, env, globals, and artifacts [COMPLETED - TDD RED PHASE]
     - Created tests/integration/test_session_isolation_tdd.py with 10 TDD tests
     - All tests marked as xfail, documenting expected isolation behavior
   - [ ] Subtask: Move execution out of shared `exec(code, ctx.execution_globals)` paths into isolated execution contexts

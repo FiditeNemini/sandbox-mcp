@@ -38,7 +38,6 @@ class SessionService:
         self._running = False
         self._teardown_hooks: Dict[str, List[Callable]] = {}
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
-        self._execution_manager: Optional[Any] = None  # NEW
         
         # Start background cleanup thread
         self._start_cleanup_thread()
@@ -201,10 +200,6 @@ class SessionService:
         # Execute teardown hooks outside the lock to avoid deadlocks
         await self._execute_teardown_hooks(session_id)
 
-        # Clean up execution context (NEW)
-        if self._execution_manager:
-            self._execution_manager.remove_context(session_id)
-
         with self._lock:
             if session_id in self._sessions:
                 del self._sessions[session_id]
@@ -342,114 +337,6 @@ class SessionService:
         self._sessions.clear()
         logger.info(f"Cleaned up all {count} sessions")
         return count
-
-    def _get_execution_manager(self) -> Any:
-        """
-        Lazy initialization of execution manager.
-        
-        Returns:
-            SessionExecutionContextManager instance.
-        """
-        if self._execution_manager is None:
-            from ..core.session_execution_manager import SessionExecutionContextManager
-            self._execution_manager = SessionExecutionContextManager()
-        return self._execution_manager
-
-    async def execute_in_session(
-        self,
-        session_id: str,
-        code: str,
-        timeout: Optional[float] = None,
-    ) -> str:
-        """
-        Execute code in a session-specific context.
-        
-        Security C2: Thread-safe with proper locking.
-        
-        Args:
-            session_id: The session identifier.
-            code: Python code to execute.
-            timeout: Optional timeout in seconds.
-            
-        Returns:
-            JSON string with execution result.
-        """
-        from ..core.execution_services import ExecutionContext
-        from .execution_helpers import execute as execute_helper
-        
-        ctx = await self.get_or_create_execution_context(session_id)
-        
-        # Execute using the session's context
-        result = execute_helper(
-            code=code,
-            ctx=ctx,
-            logger=logger,
-            launch_web_app=lambda c, t: None,  # TODO: implement web app support
-            interactive=False,
-            web_app_type=None,
-        )
-        
-        # Update last_seen timestamp and execution count
-        await self.increment_execution_count(session_id)
-        
-        return result
-
-    async def get_or_create_execution_context(self, session_id: str) -> Any:
-        """
-        Get or create execution context for a session.
-        
-        Args:
-            session_id: The session identifier.
-            
-        Returns:
-            ExecutionContext for the session.
-        """
-        manager = self._get_execution_manager()
-        return manager.get_or_create_context(session_id)
-
-    async def get_session_globals(self, session_id: str) -> Dict[str, Any]:
-        """
-        Get execution globals for a session.
-        
-        Args:
-            session_id: The session identifier.
-            
-        Returns:
-            Copy of execution globals dict.
-        """
-        ctx = await self.get_or_create_execution_context(session_id)
-        # Return copy to prevent external modification
-        return ctx.execution_globals.copy()
-
-    async def get_session_artifacts_dir(self, session_id: str) -> Optional[Path]:
-        """
-        Get artifacts directory for a session.
-        
-        Args:
-            session_id: The session identifier.
-            
-        Returns:
-            Path to artifacts directory, or None if not set.
-        """
-        ctx = await self.get_or_create_execution_context(session_id)
-        if ctx.artifacts_dir is None:
-            ctx.artifacts_dir = ctx.create_artifacts_dir()
-        return ctx.artifacts_dir
-
-    async def list_session_artifacts(self, session_id: str) -> List[Dict[str, Any]]:
-        """
-        List artifacts for a session.
-        
-        Args:
-            session_id: The session identifier.
-            
-        Returns:
-            List of artifact dictionaries.
-        """
-        from .execution_helpers import collect_artifacts
-        ctx = await self.get_or_create_execution_context(session_id)
-        return collect_artifacts(ctx, logger)
-
 
 
 # Singleton instance for convenience

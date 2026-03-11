@@ -33,6 +33,7 @@ class TestSessionIsolationTDD:
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - uses shared ctx.execution_globals"
     )
+    @pytest.mark.asyncio
     async def test_concurrent_sessions_have_separate_globals(self):
         """Test that concurrent sessions have separate global variables.
 
@@ -71,6 +72,7 @@ class TestSessionIsolationTDD:
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - uses shared ctx.execution_globals"
     )
+    @pytest.mark.asyncio
     async def test_concurrent_sessions_have_separate_cwd(self):
         """Test that concurrent sessions have separate working directories.
 
@@ -111,6 +113,7 @@ class TestSessionIsolationTDD:
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - uses shared ctx.execution_globals"
     )
+    @pytest.mark.asyncio
     async def test_concurrent_sessions_have_separate_env_vars(self):
         """Test that concurrent sessions have separate environment variables.
 
@@ -143,6 +146,7 @@ class TestSessionIsolationTDD:
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - artifacts may leak"
     )
+    @pytest.mark.asyncio
     async def test_concurrent_sessions_have_separate_artifacts(self):
         """Test that concurrent sessions have separate artifact directories.
 
@@ -179,6 +183,7 @@ artifact_path.write_text('session1 content')
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - uses shared globals"
     )
+    @pytest.mark.asyncio
     async def test_session_globals_persist_across_executions(self):
         """Test that a session's globals persist across multiple executions.
 
@@ -210,6 +215,7 @@ artifact_path.write_text('session1 content')
     @pytest.mark.xfail(
         reason="Session isolation not yet implemented - shared globals leak"
     )
+    @pytest.mark.asyncio
     async def test_concurrent_execution_safety(self):
         """Test that concurrent executions in different sessions are safe.
 
@@ -257,6 +263,7 @@ class TestSessionCleanupTDD:
     @pytest.mark.xfail(
         reason="Session cleanup not yet implemented - needs worker lifecycle"
     )
+    @pytest.mark.asyncio
     async def test_session_cleanup_removes_artifacts(self):
         """Test that cleaning up a session removes its artifacts.
 
@@ -293,6 +300,7 @@ artifact_path.write_text('test content')
     @pytest.mark.xfail(
         reason="Session cleanup not yet implemented - web app processes not tracked"
     )
+    @pytest.mark.asyncio
     async def test_session_cleanup_kills_web_processes(self):
         """Test that cleaning up a session terminates its web app processes.
 
@@ -347,6 +355,7 @@ class TestWorkerLifecycleTDD:
     @pytest.mark.xfail(
         reason="Worker lifecycle not yet implemented - needs worker pool"
     )
+    @pytest.mark.asyncio
     async def test_worker_isolation(self):
         """Test that code executes in an isolated worker process.
 
@@ -379,6 +388,7 @@ class TestWorkerLifecycleTDD:
     @pytest.mark.xfail(
         reason="Worker lifecycle not yet implemented - needs worker pool"
     )
+    @pytest.mark.asyncio
     async def test_worker_cleanup_after_timeout(self):
         """Test that workers are cleaned up after execution timeout.
 
