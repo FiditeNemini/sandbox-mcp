@@ -56,36 +56,58 @@ class TestSessionServiceThreadSafety(unittest.TestCase):
         """C2: Test thread-safe execution count increment."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
-        session = loop.run_until_complete(self.service.create_session())
-        session_id = session["session_id"]
-        
-        increments = []
-        errors = []
-        
-        def increment():
-            try:
-                result = loop.run_until_complete(
-                    self.service.increment_execution_count(session_id)
-                )
-                increments.append(result)
-            except Exception as e:
-                errors.append(e)
-        
-        # Increment from multiple threads
-        threads = []
-        for _ in range(10):
-            t = threading.Thread(target=increment)
-            threads.append(t)
-            t.start()
-        
-        for t in threads:
-            t.join()
-        
-        self.assertEqual(len(errors), 0)
-        self.assertEqual(len(increments), 10)
-        # Final count should be 10
-        self.assertEqual(increments[-1], 10)
+
+        # Start event loop in background thread
+        def run_loop():
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        loop_thread = threading.Thread(target=run_loop, daemon=True)
+        loop_thread.start()
+
+        try:
+            # Create session first
+            session = asyncio.run_coroutine_threadsafe(
+                self.service.create_session(),
+                loop
+            ).result(timeout=5)
+            session_id = session["session_id"]
+
+            increments = []
+            errors = []
+            lock = threading.Lock()
+
+            def increment():
+                try:
+                    # C2 FIX: Use run_coroutine_threadsafe for thread-safe async calls
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.service.increment_execution_count(session_id),
+                        loop
+                    )
+                    result = future.result(timeout=5)
+                    with lock:
+                        increments.append(result)
+                except Exception as e:
+                    with lock:
+                        errors.append(e)
+
+            # Increment from multiple threads
+            threads = []
+            for _ in range(10):
+                t = threading.Thread(target=increment)
+                threads.append(t)
+                t.start()
+
+            for t in threads:
+                t.join()
+
+            self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
+            self.assertEqual(len(increments), 10)
+            # Final count should be 10 (check max value, not last in list due to thread ordering)
+            self.assertEqual(max(increments), 10)
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            loop_thread.join(timeout=2)
 
     def test_concurrent_artifact_addition(self):
         """C2: Test thread-safe artifact addition."""
