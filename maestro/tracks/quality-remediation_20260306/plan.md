@@ -359,13 +359,13 @@ Ensure all acceptance criteria met and document improvements
       - Note: Worker lifecycle tests remain XFAIL as they require subprocess worker pool (separate feature)
     - [x] Subtask: Backward compatibility verified - All 329+ existing tests still pass
 
-### Tier 1: Security Blockers (4/5 COMPLETE - S2, S3, S4, S5 done; S1 partial)
+### Tier 1: Security Blockers (5/5 COMPLETE - All S1-S5 done!)
 
-- [~] Task: S1 — Fix symlink-based host file exfiltration [PARTIAL - execution_helpers.py verified]
+- [x] Task: S1 — Fix symlink-based host file exfiltration [COMPLETED]
   - [x] Subtask: Write failing test that creates symlink in artifacts dir and asserts it's skipped
   - [x] Subtask: Add or verify `is_symlink()` rejection in `src/sandbox/server/execution_helpers.py` (verified - lines 202-205)
-  - [ ] Subtask: Add or verify `is_symlink()` rejection in `src/sandbox/core/execution_context.py` (`_get_current_artifacts`) - PENDING
-  - [x] Subtask: Add `is_relative_to()` validation for resolved paths (verified in execution_helpers.py)
+  - [x] Subtask: Add or verify `is_symlink()` rejection in `src/sandbox/core/execution_context.py` (`_get_current_artifacts`, lines 726-737)
+  - [x] Subtask: Add `is_relative_to()` validation for resolved paths (verified in both locations)
   - [x] Subtask: Verify test passes, no symlinks are read (36/36 security tests pass)
 
 - [x] Task: S2 — Fix session_id path traversal [COMPLETED]
