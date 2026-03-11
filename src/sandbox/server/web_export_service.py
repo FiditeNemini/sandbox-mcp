@@ -1,44 +1,67 @@
 """
 Web Export Service for Sandbox MCP Server.
 
-This module handles web application export, persistence, and Docker containerization,
+This module handles web application export orchestration, persistence, and listing,
 replacing duplicate logic from the stdio server.
+
+This is the core orchestration layer. Template generation, Docker operations,
+and validation are split into separate modules for maintainability.
 
 Security Features:
 - Path traversal prevention via export name sanitization
 - Input validation for code and export names
 - Symlink attack prevention
-- Docker image name sanitization
 - Thread-safe singleton initialization
 - Disk space validation to prevent DoS attacks
 """
 
 from __future__ import annotations
 
-import json
+import logging
 import os
-import re
 import shutil
 import subprocess
 import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List, TypedDict, Callable, Tuple
-import logging
+from typing import Dict, Any, Optional, List, TypedDict
+
+from sandbox.server.web_export_templates import (
+    get_flask_app_templates,
+    get_streamlit_app_templates
+)
+from sandbox.server.web_export_docker import (
+    build_docker_image as docker_build,
+    check_docker_available as docker_check_available,
+    remove_docker_image as docker_remove_image,
+    sanitize_docker_image_name
+)
+from sandbox.server.web_export_validation import (
+    check_disk_space,
+    estimate_export_size,
+    MAX_EXPORT_SIZE_BYTES,
+    MIN_FREE_SPACE_BYTES,
+    MAX_EXPORT_NAME_LENGTH,
+    sanitize_export_name,
+    validate_code,
+    ValidationError
+)
 
 logger = logging.getLogger(__name__)
 
-# Constants
+# Re-export constants for backward compatibility
 MAX_CODE_SIZE = 10 * 1024 * 1024  # 10 MB max code size
-MAX_EXPORT_NAME_LENGTH = 100
 DOCKER_BUILD_TIMEOUT = 1800  # 30 minutes
-DOCKER_IMAGE_NAME_MAX_LENGTH = 128
 
-# Disk space constants
-MIN_FREE_SPACE_BYTES = 100 * 1024 * 1024  # 100 MB minimum free space
-MAX_EXPORT_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB max per export (including overhead)
-DISK_USAGE_WARNING_PERCENT = 90  # Warn when disk usage exceeds this
+__all__ = [
+    'WebExportService',
+    'get_web_export_service',
+    'ExportResult',
+    'MAX_EXPORT_NAME_LENGTH',
+    'MAX_CODE_SIZE',
+    'DOCKER_BUILD_TIMEOUT',
+]
 
 
 class ExportResult(TypedDict, total=False):
@@ -87,9 +110,20 @@ class WebExportService:
         self._lock = threading.RLock()
         self._docker_available: Optional[bool] = None
 
-    def _check_disk_space(self, directory: Path, required_bytes: int) -> Tuple[bool, str]:
+    def _check_docker_available(self) -> bool:
         """
-        Check if sufficient disk space is available for export.
+        Check if Docker is available (cached result).
+
+        Returns:
+            True if Docker is available, False otherwise.
+        """
+        if self._docker_available is None:
+            self._docker_available = docker_check_available()
+        return self._docker_available
+
+    def _check_disk_space(self, directory: Path, required_bytes: int):
+        """
+        Check if sufficient disk space is available (wrapper for backward compatibility).
 
         Args:
             directory: Directory to check space for
@@ -98,36 +132,11 @@ class WebExportService:
         Returns:
             Tuple of (success: bool, message: str)
         """
-        try:
-            # Get disk usage statistics
-            usage = shutil.disk_usage(str(directory))
-
-            # Check if we have enough free space
-            if usage.free < required_bytes:
-                free_mb = usage.free / (1024 * 1024)
-                required_mb = required_bytes / (1024 * 1024)
-                return False, (
-                    f"Insufficient disk space. "
-                    f"Free: {free_mb:.1f}MB, Required: {required_mb:.1f}MB"
-                )
-
-            # Check if disk usage is critically high
-            total_percent_used = (usage.used / usage.total) * 100
-            if total_percent_used > DISK_USAGE_WARNING_PERCENT:
-                return False, (
-                    f"Disk usage critical ({total_percent_used:.1f}%). "
-                    f"Please free up space before creating exports."
-                )
-
-            return True, "OK"
-
-        except OSError as e:
-            logger.error(f"Failed to check disk space: {e}")
-            return False, f"Unable to check disk space: {e}"
+        return check_disk_space(directory, required_bytes)
 
     def _estimate_export_size(self, code: str, app_type: str) -> int:
         """
-        Estimate export size in bytes before creation.
+        Estimate export size in bytes (wrapper for backward compatibility).
 
         Args:
             code: Application code
@@ -136,161 +145,7 @@ class WebExportService:
         Returns:
             Estimated size in bytes
         """
-        # Base file sizes (approximate)
-        REQUIREMENTS_SIZE = 50  # requirements.txt
-        DOCKERFILE_SIZE = 250  # Dockerfile
-        COMPOSE_SIZE = 200  # docker-compose.yml
-        README_SIZE = 600  # README.md
-
-        # Code size (will be written to app.py)
-        code_size = len(code.encode('utf-8'))
-
-        # Overhead for directory entries, metadata
-        OVERHEAD = 2048
-
-        return REQUIREMENTS_SIZE + DOCKERFILE_SIZE + COMPOSE_SIZE + README_SIZE + code_size + OVERHEAD
-
-    def _sanitize_export_name(self, export_name: str) -> str:
-        """
-        Sanitize export name to prevent path traversal and other attacks.
-
-        Args:
-            export_name: The export name to sanitize.
-
-        Returns:
-            Sanitized export name.
-
-        Raises:
-            ValueError: If export name is invalid.
-        """
-        if not export_name or not isinstance(export_name, str):
-            raise ValueError("Export name must be a non-empty string")
-
-        # Strip whitespace and normalize Unicode
-        import unicodedata
-        sanitized = export_name.strip()
-        sanitized = unicodedata.normalize('NFC', sanitized)
-
-        # Check length
-        if len(sanitized) > MAX_EXPORT_NAME_LENGTH:
-            raise ValueError(
-                f"Export name exceeds maximum length of {MAX_EXPORT_NAME_LENGTH}"
-            )
-
-        # Use os.path.basename for robust path component extraction
-        import os
-        sanitized = os.path.basename(sanitized)
-
-        # Reject if empty after sanitization
-        if not sanitized:
-            raise ValueError("Invalid export name after sanitization")
-
-        # Reject hidden files/directories
-        if sanitized.startswith('.'):
-            raise ValueError("Export name cannot start with a dot")
-
-        # Explicit check for any path separators (belt and suspenders)
-        path_seps = ['/', '\\', os.sep]
-        if os.altsep:
-            path_seps.append(os.altsep)
-        if any(sep in sanitized for sep in path_seps):
-            raise ValueError("Export name cannot contain path separators")
-
-        # Reject dangerous characters
-        dangerous_chars = ['<', '>', ':', '"', '|', '?', '*', '\\', '\x00']
-        for char in dangerous_chars:
-            if char in sanitized:
-                raise ValueError(f"Export name contains invalid character: {char}")
-
-        # Reject reserved names
-        if sanitized.lower() in ('.', '..', 'con', 'prn', 'aux', 'nul', 'com1', 'lpt1'):
-            raise ValueError(f"Export name '{sanitized}' is reserved")
-
-        return sanitized
-
-    def _sanitize_docker_image_name(self, name: str) -> str:
-        """
-        Sanitize name for Docker image naming rules.
-
-        Docker names must:
-        - Be lowercase
-        - Contain only a-z, 0-9, -, _
-        - Be <= 128 characters
-
-        Args:
-            name: The name to sanitize.
-
-        Returns:
-            Sanitized Docker image name.
-        """
-        # Convert to lowercase
-        sanitized = name.lower()
-
-        # Replace underscores and dots with hyphens
-        sanitized = sanitized.replace('_', '-').replace('.', '-')
-
-        # Remove invalid characters
-        sanitized = re.sub(r'[^a-z0-9-]', '', sanitized)
-
-        # Remove leading/trailing hyphens
-        sanitized = sanitized.strip('-')
-
-        # Ensure non-empty
-        if not sanitized:
-            sanitized = "sandbox-export"
-
-        # Truncate to max length
-        if len(sanitized) > DOCKER_IMAGE_NAME_MAX_LENGTH:
-            sanitized = sanitized[:DOCKER_IMAGE_NAME_MAX_LENGTH]
-
-        return sanitized
-
-    def _validate_code(self, code: str) -> None:
-        """
-        Validate code input.
-
-        Args:
-            code: The code to validate.
-
-        Raises:
-            ValueError: If code is invalid.
-        """
-        if not code or not isinstance(code, str):
-            raise ValueError("Code must be a non-empty string")
-
-        if len(code) > MAX_CODE_SIZE:
-            raise ValueError(
-                f"Code exceeds maximum size of {MAX_CODE_SIZE / (1024 * 1024):.0f} MB"
-            )
-
-        # Check for null bytes
-        if '\x00' in code:
-            raise ValueError("Code cannot contain null bytes")
-
-        # Check for whitespace-only code
-        if not code.strip():
-            raise ValueError("Code cannot be whitespace-only")
-
-    def _check_docker_available(self) -> bool:
-        """
-        Check if Docker is available.
-
-        Returns:
-            True if Docker is available, False otherwise.
-        """
-        if self._docker_available is None:
-            try:
-                result = subprocess.run(
-                    ['docker', '--version'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                self._docker_available = (result.returncode == 0)
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                self._docker_available = False
-
-        return self._docker_available
+        return estimate_export_size(code, app_type)
 
     def _ensure_exports_dir(self) -> Optional[Path]:
         """
@@ -317,7 +172,7 @@ class WebExportService:
         code: str,
         export_name: Optional[str],
         app_type: str,
-        file_templates: Dict[str, Callable]
+        file_templates: Dict[str, Any]
     ) -> ExportResult:
         """
         Common export logic for all app types.
@@ -333,9 +188,9 @@ class WebExportService:
         """
         # Validate inputs
         try:
-            self._validate_code(code)
-            sanitized_export_name = self._sanitize_export_name(export_name) if export_name else None
-        except ValueError as e:
+            validate_code(code)
+            sanitized_export_name = sanitize_export_name(export_name) if export_name else None
+        except ValidationError as e:
             return {
                 'success': False,
                 'error': str(e)
@@ -349,18 +204,18 @@ class WebExportService:
             }
 
         # Check disk space BEFORE creating anything (DoS prevention)
-        estimated_size = self._estimate_export_size(code, app_type)
-        
+        estimated_size = estimate_export_size(code, app_type)
+
         # Check if estimated export size exceeds maximum
         if estimated_size > MAX_EXPORT_SIZE_BYTES:
             return {
                 'success': False,
                 'error': f'Export size exceeds maximum ({MAX_EXPORT_SIZE_BYTES / (1024 * 1024):.0f}MB limit)'
             }
-        
+
         # Check if we have enough free space (export size + minimum free buffer)
         required_space = estimated_size + MIN_FREE_SPACE_BYTES
-        space_ok, space_message = self._check_disk_space(exports_dir, required_space)
+        space_ok, space_message = check_disk_space(exports_dir, required_space)
         if not space_ok:
             return {
                 'success': False,
@@ -400,7 +255,6 @@ class WebExportService:
             'error': None
         }
 
-        temp_dir: Optional[Path] = None
         try:
             # Create files using templates
             for filename, template_func in file_templates.items():
@@ -417,10 +271,13 @@ class WebExportService:
 
             # Try to build Docker image if available
             if self._check_docker_available():
-                result['docker_image'] = self._build_docker_image_internal(
+                success, image_name, _, _ = docker_build(
                     export_dir,
-                    result['export_name']
+                    result['export_name'],
+                    image_prefix='sandbox-'
                 )
+                if success and image_name:
+                    result['docker_image'] = image_name
 
             result['success'] = True
 
@@ -437,147 +294,6 @@ class WebExportService:
 
         return result
 
-    def _flask_app_templates(self) -> Dict[str, Callable]:
-        """Get file templates for Flask app export."""
-        def app_template(code: str, name: str) -> str:
-            return code
-
-        def requirements_template(code: str, name: str) -> str:
-            return "Flask>=2.0.0\ngunicorn>=20.0.0\n"
-
-        def dockerfile_template(code: str, name: str) -> str:
-            return '''FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app.py .
-
-EXPOSE 8000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
-'''
-
-        def compose_template(code: str, name: str) -> str:
-            return f'''version: '3.8'
-services:
-  web:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - FLASK_ENV=production
-'''
-
-        def readme_template(code: str, name: str) -> str:
-            return f'''# {name}
-
-Exported Flask application from sandbox.
-
-## Running with Docker
-
-```bash
-docker-compose up --build
-```
-
-The application will be available at http://localhost:8000
-
-## Running locally
-
-```bash
-pip install -r requirements.txt
-python app.py
-```
-
-## Files
-
-- `app.py` - Main Flask application
-- `requirements.txt` - Python dependencies
-- `Dockerfile` - Docker configuration
-- `docker-compose.yml` - Docker Compose configuration
-'''
-
-        return {
-            'app.py': app_template,
-            'requirements.txt': requirements_template,
-            'Dockerfile': dockerfile_template,
-            'docker-compose.yml': compose_template,
-            'README.md': readme_template
-        }
-
-    def _streamlit_app_templates(self) -> Dict[str, Callable]:
-        """Get file templates for Streamlit app export."""
-        def app_template(code: str, name: str) -> str:
-            return code
-
-        def requirements_template(code: str, name: str) -> str:
-            return "streamlit>=1.28.0\npandas>=1.5.0\nnumpy>=1.24.0\n"
-
-        def dockerfile_template(code: str, name: str) -> str:
-            return '''FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app.py .
-
-EXPOSE 8501
-
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-'''
-
-        def compose_template(code: str, name: str) -> str:
-            return f'''version: '3.8'
-services:
-  web:
-    build: .
-    ports:
-      - "8501:8501"
-    environment:
-      - STREAMLIT_SERVER_PORT=8501
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
-'''
-
-        def readme_template(code: str, name: str) -> str:
-            return f'''# {name}
-
-Exported Streamlit application from sandbox.
-
-## Running with Docker
-
-```bash
-docker-compose up --build
-```
-
-The application will be available at http://localhost:8501
-
-## Running locally
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Files
-
-- `app.py` - Main Streamlit application
-- `requirements.txt` - Python dependencies
-- `Dockerfile` - Docker configuration
-- `docker-compose.yml` - Docker Compose configuration
-'''
-
-        return {
-            'app.py': app_template,
-            'requirements.txt': requirements_template,
-            'Dockerfile': dockerfile_template,
-            'docker-compose.yml': compose_template,
-            'README.md': readme_template
-        }
-
     def export_flask_app(self, code: str, export_name: Optional[str] = None) -> ExportResult:
         """
         Export a Flask application as static files and Docker container.
@@ -593,7 +309,7 @@ streamlit run app.py
             code=code,
             export_name=export_name,
             app_type='flask',
-            file_templates=self._flask_app_templates()
+            file_templates=get_flask_app_templates()
         )
 
     def export_streamlit_app(self, code: str, export_name: Optional[str] = None) -> ExportResult:
@@ -611,55 +327,8 @@ streamlit run app.py
             code=code,
             export_name=export_name,
             app_type='streamlit',
-            file_templates=self._streamlit_app_templates()
+            file_templates=get_streamlit_app_templates()
         )
-
-    def _build_docker_image_internal(
-        self,
-        export_dir: Path,
-        export_name: str
-    ) -> Optional[str]:
-        """
-        Build Docker image for an exported web application.
-
-        Internal method that assumes Docker is available.
-
-        Args:
-            export_dir: Path to the export directory.
-            export_name: Name of the export.
-
-        Returns:
-            Docker image name if successful, None otherwise.
-        """
-        dockerfile_path = export_dir / "Dockerfile"
-        if not dockerfile_path.exists():
-            logger.warning(f"No Dockerfile found in export {export_name}")
-            return None
-
-        try:
-            # Sanitize image name for Docker
-            image_name = f'sandbox-{self._sanitize_docker_image_name(export_name)}'
-
-            result = subprocess.run(
-                ['docker', 'build', '-t', image_name, str(export_dir)],
-                capture_output=True,
-                text=True,
-                timeout=DOCKER_BUILD_TIMEOUT
-            )
-
-            if result.returncode == 0:
-                logger.info(f"Docker image built successfully: {image_name}")
-                return image_name
-            else:
-                logger.warning(f"Docker build failed for {export_name}: {result.stderr}")
-                return None
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Docker build timed out for {export_name}")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to build Docker image: {e}")
-            return None
 
     def export_web_app(
         self,
@@ -798,8 +467,8 @@ streamlit run app.py
             }
 
         try:
-            sanitized_name = self._sanitize_export_name(export_name)
-        except ValueError as e:
+            sanitized_name = sanitize_export_name(export_name)
+        except ValidationError as e:
             return {
                 'status': 'error',
                 'message': str(e)
@@ -882,8 +551,8 @@ streamlit run app.py
             }
 
         try:
-            sanitized_name = self._sanitize_export_name(export_name)
-        except ValueError as e:
+            sanitized_name = sanitize_export_name(export_name)
+        except ValidationError as e:
             return {
                 'status': 'error',
                 'message': str(e)
@@ -912,20 +581,8 @@ streamlit run app.py
             # Try to remove Docker image if it exists
             docker_cleaned = False
             if self._check_docker_available():
-                try:
-                    image_name = f'sandbox-{self._sanitize_docker_image_name(sanitized_name)}'
-                    remove_result = subprocess.run(
-                        ['docker', 'rmi', image_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=30
-                    )
-                    if remove_result.returncode == 0:
-                        docker_cleaned = True
-                    else:
-                        logger.debug(f"Docker image removal failed: {remove_result.stderr}")
-                except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-                    logger.debug(f"Docker cleanup error: {e}")
+                success, _ = docker_remove_image(sanitized_name, image_prefix='sandbox-')
+                docker_cleaned = success
 
             return {
                 'status': 'success',
@@ -957,8 +614,8 @@ streamlit run app.py
             }
 
         try:
-            sanitized_name = self._sanitize_export_name(export_name)
-        except ValueError as e:
+            sanitized_name = sanitize_export_name(export_name)
+        except ValidationError as e:
             return {
                 'status': 'error',
                 'message': str(e)
@@ -993,40 +650,26 @@ streamlit run app.py
                 'message': 'Docker not found. Please install Docker to build images.'
             }
 
-        try:
-            image_name = f'sandbox-{self._sanitize_docker_image_name(sanitized_name)}'
-            build_result = subprocess.run(
-                ['docker', 'build', '-t', image_name, str(export_dir)],
-                capture_output=True,
-                text=True,
-                timeout=DOCKER_BUILD_TIMEOUT
-            )
+        success, image_name, stdout, stderr = docker_build(
+            export_dir,
+            sanitized_name,
+            image_prefix='sandbox-'
+        )
 
-            if build_result.returncode == 0:
-                return {
-                    'status': 'success',
-                    'image_name': image_name,
-                    'export_name': sanitized_name,
-                    'build_output': build_result.stdout,
-                    'message': f'Docker image "{image_name}" built successfully'
-                }
-            else:
-                return {
-                    'status': 'error',
-                    'build_output': build_result.stdout,
-                    'build_error': build_result.stderr,
-                    'message': f'Docker build failed for "{sanitized_name}"'
-                }
-
-        except subprocess.TimeoutExpired:
+        if success:
             return {
-                'status': 'error',
-                'message': f'Docker build timed out for "{sanitized_name}"'
+                'status': 'success',
+                'image_name': image_name,
+                'export_name': sanitized_name,
+                'build_output': stdout,
+                'message': f'Docker image "{image_name}" built successfully'
             }
-        except Exception as e:
+        else:
             return {
                 'status': 'error',
-                'message': f'Failed to build Docker image: {str(e)}'
+                'build_output': stdout,
+                'build_error': stderr,
+                'message': f'Docker build failed for "{sanitized_name}"'
             }
 
 
@@ -1044,7 +687,7 @@ def get_web_export_service(artifacts_dir: Optional[Path] = None) -> WebExportSer
 
     Returns:
         The singleton WebExportService instance.
-        
+
     Note:
         The artifacts_dir can only be set on first initialization.
         Subsequent calls with different artifacts_dir will log a warning
