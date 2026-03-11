@@ -36,94 +36,20 @@ from typing import Any, Callable, Dict, List, Optional
 # InputValidator available for optional use, but not enforced by default
 # from sandbox.core.security import InputValidator
 
+# Delegate to centralized PatchManager for artifact capture patching
+from sandbox.core.patching import get_patch_manager
+
 
 def monkey_patch_matplotlib(ctx: Any, logger: Any) -> bool:
     """
     Monkey patch matplotlib to save plots into the current artifacts directory.
-    
+
     Security C1: Captures session-specific artifacts_dir to prevent cross-session leakage.
-    The patch uses the ctx passed at patch time, not a global reference.
+    Delegates to PatchManager for unified implementation.
     """
     try:
-        import matplotlib
-
-        backends = ["Agg", "svg", "pdf", "ps", "Cairo"]
-        backend_set = False
-
-        for backend in backends:
-            try:
-                matplotlib.use(backend, force=True)
-                logger.info(f"Successfully set matplotlib backend to: {backend}")
-                backend_set = True
-                break
-            except Exception as backend_error:
-                logger.warning(f"Failed to set backend {backend}: {backend_error}")
-
-        if not backend_set:
-            logger.warning("No matplotlib backend could be set, using default")
-
-        try:
-            current_backend = matplotlib.get_backend()
-            logger.info(f"Final matplotlib backend: {current_backend}")
-        except Exception as exc:
-            logger.error(f"Error getting current backend: {exc}")
-
-        import matplotlib.pyplot as plt
-
-        original_show = plt.show
-
-        if getattr(plt.show, "_sandbox_patched", False):
-            return True
-
-        # C1 FIX: Capture session-specific artifacts_dir at patch time
-        session_artifacts_dir = ctx.artifacts_dir
-
-        def patched_show(*args: Any, **kwargs: Any) -> Any:
-            """
-            Patched plt.show that saves to session-specific artifacts directory.
-            
-            C1: Uses captured session_artifacts_dir, not global ctx.
-            """
-            try:
-                if session_artifacts_dir:
-                    plots_dir = Path(session_artifacts_dir) / "plots"
-                    plots_dir.mkdir(parents=True, exist_ok=True)
-
-                    save_formats = [("png", "PNG"), ("svg", "SVG"), ("pdf", "PDF")]
-                    saved = False
-
-                    for ext, format_name in save_formats:
-                        try:
-                            save_path = plots_dir / f"plot_{uuid.uuid4().hex[:8]}.{ext}"
-                            plt.savefig(
-                                save_path,
-                                dpi=150,
-                                bbox_inches="tight",
-                                format=ext,
-                            )
-                            logger.info(f"Image saved to artifacts: {save_path}")
-                            saved = True
-                            break
-                        except Exception as save_error:
-                            logger.warning(
-                                f"Failed to save as {format_name}: {save_error}"
-                            )
-
-                    if not saved:
-                        logger.error("Failed to save plot in any format")
-
-                return original_show(*args, **kwargs)
-            except Exception as exc:
-                logger.error(f"Error in patched_show: {exc}")
-                return original_show(*args, **kwargs)
-
-        patched_show._sandbox_patched = True  # type: ignore[attr-defined]
-        patched_show._session_artifacts_dir = session_artifacts_dir  # type: ignore[attr-defined]
-        plt.show = patched_show
-        return True
-    except ImportError:
-        logger.warning("Matplotlib not available for monkey patching")
-        return False
+        artifacts_dir = Path(ctx.artifacts_dir) if ctx.artifacts_dir else None
+        return get_patch_manager().patch_matplotlib(artifacts_dir=artifacts_dir)
     except Exception as exc:
         logger.error(f"Critical error in matplotlib monkey patch: {exc}")
         return False
@@ -132,56 +58,13 @@ def monkey_patch_matplotlib(ctx: Any, logger: Any) -> bool:
 def monkey_patch_pil(ctx: Any, logger: Any) -> bool:
     """
     Monkey patch PIL image display/save hooks for artifact capture.
-    
+
     Security C1: Captures session-specific artifacts_dir to prevent cross-session leakage.
-    The patch uses the ctx passed at patch time, not a global reference.
+    Delegates to PatchManager for unified implementation.
     """
     try:
-        from PIL import Image
-
-        if getattr(Image.Image.show, "_sandbox_patched", False):
-            return True
-
-        original_show = Image.Image.show
-        original_save = Image.Image.save
-
-        # C1 FIX: Capture session-specific artifacts_dir at patch time
-        session_artifacts_dir = ctx.artifacts_dir
-
-        def patched_show(self: Any, title: Any = None, command: Any = None) -> Any:
-            """
-            Patched Image.show that saves to session-specific artifacts directory.
-            
-            C1: Uses captured session_artifacts_dir, not global ctx.
-            """
-            if session_artifacts_dir:
-                images_dir = Path(session_artifacts_dir) / "images"
-                images_dir.mkdir(parents=True, exist_ok=True)
-                image_path = images_dir / f"image_{uuid.uuid4().hex[:8]}.png"
-                self.save(image_path)
-                logger.info(f"Image saved to: {image_path}")
-            return original_show(self, title, command)
-
-        def patched_save(self: Any, fp: Any, format: Any = None, **params: Any) -> Any:
-            """
-            Patched Image.save that logs session-specific artifact saves.
-            
-            C1: Uses captured session_artifacts_dir, not global ctx.
-            """
-            result = original_save(self, fp, format, **params)
-            if session_artifacts_dir and str(fp).startswith(str(session_artifacts_dir)):
-                logger.info(f"Image saved to artifacts: {fp}")
-            return result
-
-        patched_show._sandbox_patched = True  # type: ignore[attr-defined]
-        patched_show._session_artifacts_dir = session_artifacts_dir  # type: ignore[attr-defined]
-        patched_save._sandbox_patched = True  # type: ignore[attr-defined]
-        patched_save._session_artifacts_dir = session_artifacts_dir  # type: ignore[attr-defined]
-        Image.Image.show = patched_show
-        Image.Image.save = patched_save
-        return True
-    except ImportError:
-        return False
+        artifacts_dir = Path(ctx.artifacts_dir) if ctx.artifacts_dir else None
+        return get_patch_manager().patch_pil(artifacts_dir=artifacts_dir)
     except Exception as exc:
         logger.error(f"Critical error in PIL monkey patch: {exc}")
         return False
