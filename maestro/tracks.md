@@ -23,8 +23,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 **Phase 10 Progress (Tzar Review Remediation):**
 - Tier 0: Architecture Blockers (MUST FIX FIRST)
   - ✅ Task A1: Consolidate duplicate execution context implementations [534b091]
-  - ⏳ Task A2: Eliminate legacy HTTP/server divergence (NEXT)
-  - ⏳ Task T1: Implement per-session process isolation
+  - ✅ Task A2: Eliminate legacy HTTP/server divergence [81e1ff7]
+  - ⏳ Task T1: Implement per-session process isolation (NEXT)
 - Tier 1: Security Blockers (BLOCKED ON TIER 0)
   - ⏳ Tasks S1-S5: Security fixes
 - Tier 2-5: Pending architecture blocker completion
@@ -44,5 +44,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 - **Phase 10 A1:** Both transports now use shared ExecutionContext from core.execution_services
 - **Phase 10 A1:** Eliminated 200+ lines of duplicate code from stdio server
 - **Phase 10 A1:** Eliminated duplicate ExecutionContext from HTTP server
+- **Phase 10 A2:** Reduced HTTP server from 539 to 58 lines (89% reduction)
+- **Phase 10 A2:** Both transports now use shared tool_registry for all MCP tools
+- **Phase 10 A2:** Added transport-parity regression tests (14 tests)
 
 **Known Limitations:** None - All identified limitations have been resolved.
