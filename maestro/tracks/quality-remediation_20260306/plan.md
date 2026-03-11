@@ -413,7 +413,7 @@ Ensure all acceptance criteria met and document improvements
   - [x] Subtask: Replace `asyncio.run()` with loop-aware task scheduling in `_check_and_cleanup_expired()` (uses asyncio.run_coroutine_threadsafe at line 112)
   - [x] Subtask: Verify no RuntimeError with active event loop (8/8 async safety tests pass)
 
-### Tier 3: Quality, Maintainability, and Optimization Work (6/7 COMPLETE - I1 partial, I2, I3, I4, I5 done; I6 in progress; I7 continuous)
+### Tier 3: Quality, Maintainability, and Optimization Work (6/7 COMPLETE - I1 partial, I2, I3, I4, I5, I6 done; I7 continuous)
 
 - [x] Task: I1 — Complete PatchManager implementation [PARTIAL COMPLETE - delegation implemented]
   - [x] Subtask: Migrate PIL/matplotlib patching logic from `execution_helpers.py` to `core/patching.py` (delegation implemented)
