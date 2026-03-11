@@ -298,11 +298,28 @@ Ensure all acceptance criteria met and document improvements
     - Both transports use shared catalog primitives from `server.catalog`
     - Note: HTTP server still has its own tool implementations (addressed in Task A2)
 
-- [ ] Task: A2 — Eliminate legacy HTTP/server divergence
-  - [ ] Subtask: Refactor `src/sandbox/mcp_sandbox_server.py` onto shared execution, patching, and artifact helpers
-  - [ ] Subtask: Remove or replace transport-specific monkey-patching and artifact capture logic that still bypasses shared modules
-  - [ ] Subtask: Align HTTP and stdio transports on the same security, artifact, and execution semantics
-  - [ ] Subtask: Add transport-parity regression coverage
+- [x] Task: A2 — Eliminate legacy HTTP/server divergence [COMPLETED]
+  - [x] Subtask: Refactor `src/sandbox/mcp_sandbox_server.py` onto shared execution, patching, and artifact helpers [COMPLETED]
+    - HTTP server reduced from 539 lines to 58 lines (89% reduction)
+    - Now uses `create_tool_registry()` and shared helpers like stdio server
+    - Removed duplicate implementations of:
+      - monkey_patch_matplotlib(), monkey_patch_pil()
+      - find_free_port(), launch_web_app()
+      - collect_artifacts()
+      - execute(), shell_execute(), get_execution_info(), etc.
+  - [x] Subtask: Remove or replace transport-specific monkey-patching and artifact capture logic that still bypasses shared modules [COMPLETED]
+    - All monkey-patching now uses shared implementation from `server/execution_helpers.py`
+    - All artifact capture uses shared implementation from `server/artifact_helpers.py`
+  - [x] Subtask: Align HTTP and stdio transports on the same security, artifact, and execution semantics [COMPLETED]
+    - Both transports now use:
+      - Same `ExecutionContext` from `core.execution_services`
+      - Same `get_resource_manager()` and `get_security_manager()`
+      - Same `tool_registry` for tool registration
+      - Same catalog primitives from `server.catalog`
+  - [x] Subtask: Add transport-parity regression coverage [COMPLETED]
+    - Created `tests/unit/test_transport_parity.py` with 14 tests
+    - All tests verify both transports have feature parity
+    - Tests check for no duplicate classes or functions
 
 - [ ] Task: T1 — Implement per-session process isolation
   - [ ] Subtask: Write failing integration coverage for concurrent isolated sessions with separate cwd, env, globals, and artifacts
