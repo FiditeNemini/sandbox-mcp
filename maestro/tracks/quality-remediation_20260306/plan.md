@@ -247,6 +247,206 @@ Ensure all acceptance criteria met and document improvements
 
 ---
 
+## Phase 10: Tzar Review Remediation (NEW — Post-Review)
+
+**Tzar Review Date:** 2026-03-11
+**Verdict:** ❌ FAIL
+**Critical Issues:** Source review confirms unresolved architectural, security, and coverage blockers
+**Coverage Gap:** 49% actual vs 95% target
+
+### Remediation Rules
+
+- [x] Rule: No task in this phase may be marked complete from plan state or commit history alone. [VALIDATED_TZAR_REVIEW]
+  - [x] Subtask: Validate each completion against live source plus focused tests
+  - [x] Subtask: Record evidence in the corresponding review/remediation doc
+    - Evidence: docs/tzar-of-excellence-final-review.md contains comprehensive source-backed validation of all phases
+- [ ] Rule: Architectural blockers are mandatory predecessors for downstream remediation.
+  - [ ] Subtask: Do not mark security or coverage remediation complete while duplicate execution architectures remain
+  - [ ] Subtask: Do not mark session-isolation work complete until execution is moved out of shared in-process globals
+- [ ] Rule: Every code remediation task must follow TDD.
+  - [ ] Subtask: Add or update failing tests first
+  - [ ] Subtask: Implement the minimum change to pass
+  - [ ] Subtask: Re-run focused and regression suites before advancing
+
+### Tier 0: Architecture Blockers (MUST FIX FIRST)
+
+- [~] Task: A1 — Consolidate duplicate execution context implementations
+  - [x] Subtask: Document the active responsibilities split across `src/sandbox/mcp_sandbox_server_stdio.py`, `src/sandbox/mcp_sandbox_server.py`, `src/sandbox/core/execution_services.py`, and `src/sandbox/core/execution_context.py`
+    - Evidence (LeIndex analysis 2026-03-11):
+    - `mcp_sandbox_server_stdio.py:ExecutionContext` (lines 41-347): Local class with backup/rollback/artifact methods, used as global singleton
+    - `core/execution_services.py:ExecutionContext` (lines 19-85): Unified context class with path validation
+    - `core/execution_services.py:ExecutionContextService` (lines 88-339): Service for managing contexts
+    - `core/execution_context.py:PersistentExecutionContext`: Full persistent context with SQLite, session management
+    - stdio server imports PersistentExecutionContext but uses its own ExecutionContext for tool operations
+  - [x] Subtask: Choose the single authoritative execution/session abstraction for both transports
+    - Decision (LeIndex analysis 2026-03-11):
+    - **Authoritative Context:** `PersistentExecutionContext` in `core/execution_context.py` (1143 lines, full persistence)
+    - **Service Layer:** `ExecutionContextService` in `core/execution_services.py` for managing contexts
+    - **Backup/Rollback:** Move stdio server's backup/rollback methods to `ArtifactBackupService` in core
+    - **Both transports** will use core services via dependency injection through `ToolRegistry`
+  - [ ] Subtask: Remove stdio server-local `ExecutionContext`
+  - [ ] Subtask: Remove HTTP server-local `ExecutionContext`
+  - [ ] Subtask: Verify transport bootstraps only wire shared services instead of duplicating them
+
+- [ ] Task: A2 — Eliminate legacy HTTP/server divergence
+  - [ ] Subtask: Refactor `src/sandbox/mcp_sandbox_server.py` onto shared execution, patching, and artifact helpers
+  - [ ] Subtask: Remove or replace transport-specific monkey-patching and artifact capture logic that still bypasses shared modules
+  - [ ] Subtask: Align HTTP and stdio transports on the same security, artifact, and execution semantics
+  - [ ] Subtask: Add transport-parity regression coverage
+
+- [ ] Task: T1 — Implement per-session process isolation
+  - [ ] Subtask: Write failing integration coverage for concurrent isolated sessions with separate cwd, env, globals, and artifacts
+  - [ ] Subtask: Design the worker lifecycle for isolated execution and cleanup
+  - [ ] Subtask: Move execution out of shared `exec(code, ctx.execution_globals)` paths into isolated workers
+  - [ ] Subtask: Ensure artifact collection only reads mounted/output paths owned by the worker session
+  - [ ] Subtask: Ensure web-app child processes are tracked and cleaned up by worker/process group
+  - [ ] Subtask: Verify session isolation through concurrent regression tests
+
+### Tier 1: Security Blockers (BLOCKED ON TIER 0)
+
+- [ ] Task: S1 — Fix symlink-based host file exfiltration
+  - [ ] Subtask: Write failing test that creates symlink in artifacts dir and asserts it's skipped
+  - [ ] Subtask: Add or verify `is_symlink()` rejection in `src/sandbox/server/execution_helpers.py`
+  - [ ] Subtask: Add or verify `is_symlink()` rejection in `src/sandbox/core/execution_context.py` (`_get_current_artifacts`)
+  - [ ] Subtask: Add `is_relative_to()` validation for resolved paths
+  - [ ] Subtask: Verify test passes, no symlinks are read
+
+- [ ] Task: S2 — Fix session_id path traversal
+  - [ ] Subtask: Write failing test with `session_id="../../etc"` asserting ValueError
+  - [ ] Subtask: Enforce validation in `PersistentExecutionContext`
+  - [ ] Subtask: Enforce the same validation in any transport or helper that still constructs session paths
+  - [ ] Subtask: Remove duplicate or divergent validation patterns once the shared utility is in place
+
+- [ ] Task: S3 — Fix backup_name path traversal
+  - [ ] Subtask: Write failing test with `backup_name="../../exploit"` asserting rejection
+  - [ ] Subtask: Apply the shared sanitization pattern to `backup_artifacts()` and `rollback_artifacts()`
+  - [ ] Subtask: Verify backup inspection/listing paths cannot escape the backup root
+  - [ ] Subtask: Verify test passes
+
+- [ ] Task: S4 — Replace prefix-based path validation everywhere it remains security-relevant
+  - [ ] Subtask: Write test with `/home/user_evil` against base `/home/user` asserting failure
+  - [ ] Subtask: Replace remaining `startswith()` path checks in `src/sandbox/core/execution_services.py`
+  - [ ] Subtask: Replace remaining `startswith()` path checks in `src/sandbox/core/security.py`
+  - [ ] Subtask: Replace remaining `startswith()` path checks in `src/sandbox/core/patching.py`
+  - [ ] Subtask: Replace remaining `startswith()` path checks in any transport-specific code still bypassing shared validation
+  - [ ] Subtask: Verify all path validation tests pass
+
+- [ ] Task: S5 — Resolve main execution-path security enforcement gap
+  - [ ] Subtask: Decide and document the security model for primary code execution after Tier 0 architecture is in place
+  - [ ] Subtask: If validator-based gating remains part of the design, write failing tests asserting enforcement on `execute()` and `execute_with_artifacts()`
+  - [ ] Subtask: If isolation is the primary protection, remove contradictory plan/docs language and add enforcement/tests around the actual controls
+  - [ ] Subtask: Verify all user-facing security claims match implemented controls
+
+### Tier 2: Correctness, Concurrency, and Shared-State Fixes
+
+- [ ] Task: C1 — Fix global state session isolation breach
+  - [ ] Subtask: Write test asserting monkey patches capture per-session artifacts_dir
+  - [ ] Subtask: Refactor monkey patches to avoid module-global singleton state
+  - [ ] Subtask: Ensure transport-level patching uses shared/session-scoped helpers only
+  - [ ] Subtask: Verify artifacts from concurrent sessions don't leak
+
+- [ ] Task: C2 — Fix SessionService thread safety violations
+  - [ ] Subtask: Write concurrent access tests for _sessions dict
+  - [ ] Subtask: Add locking to `create_session()`, `get_active_sessions()`, `increment_execution_count()`, `add_artifact()`
+  - [ ] Subtask: Ensure lock held during dict writes and iterations
+  - [ ] Subtask: Verify concurrent tests pass
+
+- [ ] Task: C3 — Fix asyncio.run() inside daemon thread
+  - [ ] Subtask: Write test that triggers cleanup with active event loop
+  - [ ] Subtask: Replace `asyncio.run()` with loop-aware task scheduling in `_check_and_cleanup_expired()`
+  - [ ] Subtask: Verify no RuntimeError with active event loop
+
+### Tier 3: Quality, Maintainability, and Optimization Work
+
+- [ ] Task: I1 — Complete PatchManager implementation
+  - [ ] Subtask: Migrate PIL/matplotlib patching logic from `execution_helpers.py` to `core/patching.py`
+  - [ ] Subtask: Make PatchManager authoritative source for patching
+  - [ ] Subtask: Update execution_helpers to delegate to PatchManager
+  - [ ] Subtask: Ensure per-session artifact directory isolation in patches
+
+- [ ] Task: I2 — Consolidate duplicate path validation logic
+  - [ ] Subtask: Merge `_is_valid_project_root()` and `_is_valid_path()` into single utility
+  - [ ] Subtask: Update all callers to use unified function
+  - [ ] Subtask: Verify DRY principle maintained
+
+- [ ] Task: I3 — Split oversized modules
+  - [ ] Subtask: Split `execution_context.py` (1,212 lines) into focused modules (<500 lines each)
+  - [ ] Subtask: Split `web_export_service.py` (1,069 lines) into focused modules (<500 lines each)
+  - [ ] Subtask: Verify all modules meet line count requirement
+
+- [ ] Task: I4 — Fix resource leak in execute_with_artifacts
+  - [ ] Subtask: Write test measuring resources per call
+  - [ ] Subtask: Replace full PersistentExecutionContext with lightweight artifact diff mechanism
+  - [ ] Subtask: Verify no DB/dirs/env mutation per call
+
+- [ ] Task: I5 — Fix web app launch reliability
+  - [ ] Subtask: Implement atomic port binding (no TOCTOU race)
+  - [ ] Subtask: Add server readiness verification (not just sleep)
+  - [ ] Subtask: Fix pipe deadlock for long-lived processes (drain buffers)
+  - [ ] Subtask: Add process handle for Flask exec cleanup
+
+- [ ] Task: I6 — Reduce dead and divergent legacy behavior
+  - [ ] Subtask: Remove or refactor transport-specific code that duplicates shared helpers without adding unique behavior
+  - [ ] Subtask: Verify helper/module boundaries match the intended architecture after Tier 0
+  - [ ] Subtask: Remove stale remediation tasks or comments that no longer match the source of truth
+
+- [ ] Task: I7 — Align metadata, docs, and review artifacts with actual repository state
+  - [ ] Subtask: Update track metadata counts after each remediation milestone
+  - [ ] Subtask: Maintain `docs/quality-remediation-track-tzar-review.md` as the source-backed review ledger
+  - [ ] Subtask: Ensure plan, docs, and coverage figures stay synchronized
+
+### Tier 4: Test Coverage Recovery
+
+- [ ] Task: T2 — Write TDD tests for all security fixes
+  - [ ] Subtask: Write failing tests for S1-S5 first
+  - [ ] Subtask: Implement fixes to make tests pass
+  - [ ] Subtask: Add integration tests for security scenarios
+
+- [ ] Task: T3 — Raise coverage to 80%+ on security-critical paths
+  - [ ] Subtask: Raise coverage on `src/sandbox/server/execution_helpers.py`
+  - [ ] Subtask: Raise coverage on `src/sandbox/core/security.py`
+  - [ ] Subtask: Raise coverage on `src/sandbox/core/execution_services.py`
+  - [ ] Subtask: Raise coverage on artifact helper/service paths and session management
+  - [ ] Subtask: Measure and verify 80%+ on critical paths
+
+- [ ] Task: T4 — Raise overall coverage to 95%
+  - [ ] Subtask: Add tests for `src/sandbox/core/execution_context.py` (60% → 95%)
+  - [ ] Subtask: Add tests for `src/sandbox/core/interactive_repl.py` (0% → 95%)
+  - [ ] Subtask: Add tests for `src/sandbox/core/manim_support.py` (0% → 95%)
+  - [ ] Subtask: Add tests for low-coverage helper modules (`artifact_helpers`, `package_helpers`, `shell_helpers`, `manim_helpers`)
+  - [ ] Subtask: Add tests for low-coverage SDK modules (`base_sandbox`, `local_sandbox`, `command`, `metrics`, `node_sandbox`, `python_sandbox`, `remote_sandbox`)
+  - [ ] Subtask: Verify overall coverage reaches 95%
+
+### Tier 5: Documentation, Verification, and Re-Review Gates
+
+- [ ] Task: V1 — Re-baseline remediation evidence
+  - [ ] Subtask: Re-run source-backed review after Tier 0-4 completion
+  - [ ] Subtask: Confirm plan status matches source, tests, and coverage output
+  - [ ] Subtask: Update remediation doc with resolved vs unresolved findings
+
+- [ ] Task: V2 — Restore Maestro checkpoint discipline
+  - [ ] Subtask: Create a phase review summary document for the remediation phase
+  - [ ] Subtask: Run mandatory reviewer validation before any remediation checkpoint is considered complete
+  - [ ] Subtask: Re-run the Tzar review with zero-tolerance criteria and capture PASS/FAIL
+
+### Acceptance Criteria (Post-Remediation)
+
+- [ ] Tier 0 architecture blockers resolved before downstream sign-off
+- [ ] All 5 security vulnerabilities (S1-S5) fixed with passing TDD tests
+- [ ] Process isolation architecture implemented (T1)
+- [ ] Single ExecutionContext in core (A1)
+- [ ] HTTP and stdio transports share the same execution/security/artifact behavior
+- [ ] Session isolation verified (C1)
+- [ ] Thread safety verified (C2, C3)
+- [ ] All modules <500 lines (I3)
+- [ ] Test coverage ≥80% on security-critical paths (T3)
+- [ ] Overall test coverage ≥95% (T4)
+- [ ] Full suite passes at current baseline or better (`337 passed, 2 skipped` as of 2026-03-11)
+- [ ] Metadata, remediation docs, and plan all reflect the same state
+- [ ] Tzar re-review: PASS
+
+---
+
 ## Quality Notes - Code Patterns from Phase 5 Refactor
 
 **Reference Implementation:** The Phase 5 refactoring (commit `36e23ec`) established quality patterns that MUST be followed for all future work.

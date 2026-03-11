@@ -12,7 +12,10 @@ from fastmcp import FastMCP
 from .core.execution_context import PersistentExecutionContext
 from .core.resource_manager import get_resource_manager
 from .core.security import SecurityLevel, get_security_manager
+from .core.artifact_backup_service import get_backup_service
+from .server.catalog import SERVER_ID, SERVER_INSTRUCTIONS, register_catalog_primitives
 from .server.tool_registry import create_tool_registry
+from . import __version__
 
 # Set up logging to file instead of stderr to avoid MCP protocol interference
 log_file = Path(tempfile.gettempdir()) / "sandbox_mcp_server.log"
@@ -28,8 +31,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create FastMCP server named "python-sandbox"
-mcp = FastMCP("python-sandbox")
+# Create FastMCP server with explicit instructions for discovery-oriented clients.
+mcp = FastMCP(
+    SERVER_ID,
+    instructions=SERVER_INSTRUCTIONS,
+    version=__version__,
+)
 
 
 class ExecutionContext:
@@ -142,26 +149,13 @@ class ExecutionContext:
         if self.artifacts_dir and self.artifacts_dir.exists():
             shutil.rmtree(self.artifacts_dir, ignore_errors=True)
 
+    def _sanitize_backup_name(self, backup_name: str) -> str:
+        """Delegate to ArtifactBackupService for sanitization."""
+        return get_backup_service().sanitize_backup_name(backup_name)
+
     def backup_artifacts(self, backup_name: str | None = None) -> str:
-        """Create a versioned backup of current artifacts."""
-        if not self.artifacts_dir or not self.artifacts_dir.exists():
-            return "No artifacts directory to backup"
-
-        backup_root = self.project_root / "artifact_backups"
-        backup_root.mkdir(exist_ok=True)
-
-        from datetime import datetime
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = (
-            f"{backup_name}_{timestamp}" if backup_name else f"backup_{timestamp}"
-        )
-        backup_path = backup_root / backup_name
-
-        shutil.copytree(self.artifacts_dir, backup_path)
-        self._cleanup_old_backups(backup_root)
-
-        return str(backup_path)
+        """Delegate to ArtifactBackupService for backup operations."""
+        return get_backup_service().backup_artifacts(self, backup_name)
 
     def _cleanup_old_backups(self, backup_root: Path, max_backups: int = 10) -> None:
         """Clean up old backup directories to prevent storage overflow."""
@@ -207,39 +201,8 @@ class ExecutionContext:
         return backups
 
     def rollback_artifacts(self, backup_name: str) -> str:
-        """Rollback to a previous artifact version with improved validation."""
-        backup_root = self.project_root / "artifact_backups"
-
-        if not backup_root.exists():
-            return "No backups directory found. Available backups: none"
-
-        backup_path = backup_root / backup_name
-
-        if not backup_path.exists():
-            available_backups = [d.name for d in backup_root.iterdir() if d.is_dir()]
-            if available_backups:
-                preview = ", ".join(available_backups[:5])
-                suffix = "..." if len(available_backups) > 5 else ""
-                return f"Backup '{backup_name}' not found. Available backups: {preview}{suffix}"
-            return f"Backup '{backup_name}' not found. No backups available."
-
-        if not self.artifacts_dir:
-            return "No current artifacts directory. Please create artifacts first."
-
-        current_backup = self.backup_artifacts("pre_rollback")
-
-        try:
-            if self.artifacts_dir and self.artifacts_dir.exists():
-                shutil.rmtree(self.artifacts_dir)
-
-            shutil.copytree(backup_path, self.artifacts_dir)
-
-            return (
-                f"Successfully rolled back to backup '{backup_name}'. "
-                f"Previous state saved as '{Path(current_backup).name}'"
-            )
-        except Exception as e:
-            return f"Failed to rollback: {str(e)}"
+        """Delegate to ArtifactBackupService for rollback operations."""
+        return get_backup_service().rollback_artifacts(self, backup_name)
 
     def get_backup_info(self, backup_name: str) -> Dict[str, Any]:
         """Get detailed information about a specific backup."""
@@ -291,6 +254,7 @@ tool_registry = create_tool_registry(
     persistent_context_factory=PersistentExecutionContext,
 )
 tool_registry.register_all()
+register_catalog_primitives(mcp)
 
 
 def main() -> None:

@@ -6,14 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **LeIndex MCP MUST be used for ALL code analysis actions.** NEVER use standard search, read, grep, or glob tools. LeIndex tools ALWAYS take precedence.
 
-- Use `leindex_project_map` for codebase structure
-- Use `leindex_file_summary` for file analysis (supersedes Read)
-- Use `leindex_search` for semantic code search
-- Use `leindex_grep_symbols` for symbol-aware searching (supersedes Grep)
-- Use `leindex_read_symbol` for reading specific symbols
-- Use `leindex_symbol_lookup` for finding definitions and relationships
+### LeIndex CLI Commands (Preferred)
 
-Only use Bash for system commands, never for code/file operations.
+```bash
+# Index/refresh the project
+leindex index /home/scooter/Documents/Product/sandbox-mcp
+
+# Search code with semantic understanding
+leindex -p /home/scooter/Documents/Product/sandbox-mcp search "query"
+
+# Analyze with context expansion
+leindex -p /home/scooter/Documents/Product/sandbox-mcp analyze "query"
+```
+
+### Key Principles
+
+1. **Use LeIndex search instead of Grep/Glob** - Provides semantic understanding, not just text matching
+2. **Use LeIndex analyze instead of reading entire files** - Get targeted context with token budgets
+3. **Refresh index before analysis** - `leindex index <path>` to ensure fresh data
+4. **Only use Bash for system commands**, never for code/file operations
+
+### When to Use LeIndex
+
+- **Code discovery**: `leindex search "class_name"` - Find all references and definitions
+- **Architecture understanding**: `leindex analyze "execution context"` - Get expanded context
+- **Relationship mapping**: LeIndex builds PDG with call graphs and dependencies
+- **Semantic search**: Find code by behavior, not just keywords
 
 ## Project Overview
 
