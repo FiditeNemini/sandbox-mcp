@@ -79,6 +79,7 @@ class ToolRegistry:
         resource_manager: Any,
         security_manager: Any,
         persistent_context_factory: Callable[[], Any],
+        session_service: Any = None,
     ) -> None:
         self.mcp = mcp
         self.ctx = ctx
@@ -86,6 +87,7 @@ class ToolRegistry:
         self.resource_manager = resource_manager
         self.security_manager = security_manager
         self.persistent_context_factory = persistent_context_factory
+        self.session_service = session_service
 
     def _collect_artifacts(self) -> list[dict[str, Any]]:
         return collect_artifacts(self.ctx, self.logger)
@@ -153,14 +155,22 @@ class ToolRegistry:
             code: str,
             interactive: bool = False,
             web_app_type: str | None = None,
+            session_id: str | None = None,
         ) -> str:
+            # For session isolation, pass the raw launch_web_app function
+            # along with ctx, logger, resource_manager so execute_helper
+            # can create session-specific closures
+            from .execution_helpers import launch_web_app as raw_launch_web_app
             return execute_helper(
                 code=code,
                 ctx=self.ctx,
                 logger=self.logger,
-                launch_web_app=self._launch_web_app,
+                launch_web_app=raw_launch_web_app,
                 interactive=interactive,
                 web_app_type=web_app_type,
+                session_service=self.session_service,
+                session_id=session_id,
+                resource_manager=self.resource_manager,
             )
 
     def register_list_artifacts(self) -> None:
@@ -220,6 +230,7 @@ class ToolRegistry:
             command: str,
             working_directory: str | None = None,
             timeout: int = 30,
+            session_id: str | None = None,
         ) -> str:
             return shell_execute_helper(
                 command=command,
@@ -227,6 +238,8 @@ class ToolRegistry:
                 ctx=self.ctx,
                 working_directory=working_directory,
                 timeout=timeout,
+                session_service=self.session_service,
+                session_id=session_id,
             )
 
     def register_create_manim_animation(self) -> None:
@@ -259,8 +272,12 @@ class ToolRegistry:
 
     def register_get_execution_info(self) -> None:
         @self._tool("get_execution_info")
-        def get_execution_info() -> str:
-            return get_execution_info_helper(self.ctx)
+        def get_execution_info(session_id: str | None = None) -> str:
+            return get_execution_info_helper(
+                self.ctx,
+                session_service=self.session_service,
+                session_id=session_id,
+            )
 
     def register_get_artifact_report(self) -> None:
         @self._tool("get_artifact_report")
@@ -304,7 +321,11 @@ class ToolRegistry:
                 list_installed_packages=lambda: list_installed_packages_helper(
                     self.ctx
                 ),
-                get_execution_info=lambda: get_execution_info_helper(self.ctx),
+                get_execution_info=lambda: get_execution_info_helper(
+                    self.ctx,
+                    session_service=self.session_service,
+                    session_id=None,
+                ),
                 create_manim_animation=lambda manim_code: create_manim_animation_helper(
                     manim_code=manim_code,
                     ctx=self.ctx,
@@ -318,6 +339,7 @@ class ToolRegistry:
         def execute_with_artifacts(
             code: str,
             track_artifacts: bool = True,
+            session_id: str | None = None,
         ) -> str:
             return execute_with_artifacts_helper(
                 code=code,
@@ -325,6 +347,8 @@ class ToolRegistry:
                 logger=self.logger,
                 persistent_context_factory=self.persistent_context_factory,
                 track_artifacts=track_artifacts,
+                session_service=self.session_service,
+                session_id=session_id,
             )
 
     def register_backup_current_artifacts(self) -> None:
@@ -426,6 +450,7 @@ def create_tool_registry(
     resource_manager: Any,
     security_manager: Any,
     persistent_context_factory: Callable[[], Any],
+    session_service: Any = None,
 ) -> ToolRegistry:
     """Create a configured tool registry instance."""
     return ToolRegistry(
@@ -435,6 +460,7 @@ def create_tool_registry(
         resource_manager=resource_manager,
         security_manager=security_manager,
         persistent_context_factory=persistent_context_factory,
+        session_service=session_service,
     )
 
 

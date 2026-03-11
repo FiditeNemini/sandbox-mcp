@@ -397,13 +397,50 @@ class SessionService:
     async def get_or_create_execution_context(self, session_id: str) -> Any:
         """
         Get or create execution context for a session.
-        
+
         Args:
             session_id: The session identifier.
-            
+
         Returns:
             ExecutionContext for the session.
         """
+        manager = self._get_execution_manager()
+        return manager.get_or_create_context(session_id)
+
+    def get_or_create_execution_context_sync(self, session_id: str) -> Any:
+        """
+        Get or create execution context for a session (synchronous version).
+
+        This method provides a synchronous interface for getting or creating
+        execution contexts, which is needed when called from non-async code
+        such as MCP server tools.
+
+        Args:
+            session_id: The session identifier.
+
+        Returns:
+            ExecutionContext for the session.
+        """
+        # Ensure session exists in _sessions for tracking and cleanup
+        with self._lock:
+            if session_id not in self._sessions:
+                # Create minimal session entry for tracking
+                self._sessions[session_id] = {
+                    "session_id": session_id,
+                    "created_at": datetime.now(timezone.utc),
+                    "status": "active",
+                    "execution_count": 0,
+                    "artifacts": [],
+                    "last_seen": datetime.now(timezone.utc),
+                    "timeout_seconds": 3600,  # Default 1 hour timeout
+                    "status_history": ["active"],
+                }
+                logger.info(f"Created session tracking entry: {session_id}")
+            else:
+                # Update last_seen timestamp
+                self._sessions[session_id]["last_seen"] = datetime.now(timezone.utc)
+
+        # Get or create execution context
         manager = self._get_execution_manager()
         return manager.get_or_create_context(session_id)
 

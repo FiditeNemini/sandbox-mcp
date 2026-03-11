@@ -271,6 +271,8 @@ def test_shell_execute_wrapper_calls_helper(registry, monkeypatch):
         ctx=instance.ctx,
         working_directory="/tmp",
         timeout=5,
+        session_service=instance.session_service,
+        session_id=None,
     )
 
 
@@ -326,7 +328,11 @@ def test_get_execution_info_wrapper_calls_helper(registry, monkeypatch):
 
     instance.register_get_execution_info()
     assert json.loads(mcp.tools["get_execution_info"]())["project_root"] == "/tmp"
-    helper.assert_called_once_with(instance.ctx)
+    helper.assert_called_once_with(
+        instance.ctx,
+        session_service=instance.session_service,
+        session_id=None,
+    )
 
 
 def test_get_artifact_report_wrapper_calls_helper(registry, monkeypatch):
@@ -412,6 +418,8 @@ def test_execute_with_artifacts_wrapper_calls_helper(registry, monkeypatch):
         logger=instance.logger,
         persistent_context_factory=instance.persistent_context_factory,
         track_artifacts=False,
+        session_service=instance.session_service,
+        session_id=None,
     )
 
 

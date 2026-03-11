@@ -17,6 +17,8 @@ def shell_execute(
     ctx: Any,
     working_directory: Optional[str] = None,
     timeout: int = 30,
+    session_service: Any = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Execute a shell command safely in a controlled environment.
@@ -24,13 +26,34 @@ def shell_execute(
     Args:
         command: The shell command to execute.
         security_manager: Security manager used to validate commands.
-        ctx: Execution context providing sandbox metadata.
+        ctx: Execution context providing sandbox metadata (used if no session_id provided).
         working_directory: Directory to run the command in.
         timeout: Maximum execution time in seconds.
+        session_service: Optional session service for per-session context.
+        session_id: Optional session ID for per-session execution.
 
     Returns:
         JSON string containing execution results, stdout, stderr, and metadata.
     """
+    # Use per-session context if session_id provided
+    if session_id and session_service:
+        try:
+            # Get or create session-specific execution context (synchronous)
+            ctx = session_service.get_or_create_execution_context_sync(session_id)
+        except (ImportError, AttributeError, RuntimeError) as e:
+            # Specific exceptions that indicate session service issues
+            # Log and fall back to default context with clear warning
+            logger.warning(
+                f"Session context unavailable for {session_id}, using default: {e}"
+            )
+        except Exception as e:
+            # Unexpected error - log with higher severity and still fail closed
+            logger.error(
+                f"Unexpected error getting session context for {session_id}: {e}"
+            )
+            # For unexpected errors, don't silently fail - let the error propagate
+            # This prevents silent fallback that could mask serious issues
+            raise
     if working_directory is None:
         working_directory = str(ctx.sandbox_area)
 

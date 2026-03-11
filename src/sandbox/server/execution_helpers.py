@@ -245,13 +245,79 @@ def execute(
     code: str,
     ctx: Any,
     logger: Any,
-    launch_web_app: Callable[[str, str], Optional[str]],
+    launch_web_app: Any,  # Raw function: (code, app_type, ctx, logger, resource_manager) -> Optional[str]
     interactive: bool = False,
     web_app_type: Optional[str] = None,
+    session_service: Any = None,
+    session_id: Optional[str] = None,
+    resource_manager: Any = None,
 ) -> str:
     """
     Execute Python code with artifact capture and optional web app launch support.
+
+    Args:
+        code: Python code to execute.
+        ctx: Execution context (used if no session_id provided).
+        logger: Logger instance.
+        launch_web_app: Function to launch web apps.
+        interactive: Whether to enable interactive mode.
+        web_app_type: Type of web app (flask/streamlit).
+        session_service: Optional session service for per-session context.
+        session_id: Optional session ID for per-session execution.
+        resource_manager: Resource manager for web app launch.
+
+    Returns:
+        JSON string with execution result.
     """
+    # Use per-session context if session_id provided
+    if session_id and session_service:
+        try:
+            # Get or create session-specific execution context (synchronous)
+            ctx = session_service.get_or_create_execution_context_sync(session_id)
+            logger.info(f"Using per-session context for session: {session_id}")
+            # CRITICAL: Create session-specific closure with correct ctx
+            # launch_web_app is now the raw function that needs (code, app_type, ctx, logger, resource_manager)
+            def launch_web_app_for_session(code: str, app_type: str) -> Optional[str]:
+                return launch_web_app(
+                    code=code,
+                    app_type=app_type,
+                    ctx=ctx,
+                    logger=logger,
+                    resource_manager=resource_manager,
+                )
+        except (ImportError, AttributeError, RuntimeError) as e:
+            # Specific exceptions that indicate session service issues
+            # Log and fall back to default context with clear warning
+            logger.warning(
+                f"Session context unavailable for {session_id}, using default: {e}"
+            )
+            # Fall back to default context - session isolation not available
+            def launch_web_app_for_session(code: str, app_type: str) -> Optional[str]:
+                return launch_web_app(
+                    code=code,
+                    app_type=app_type,
+                    ctx=ctx,
+                    logger=logger,
+                    resource_manager=resource_manager,
+                )
+        except Exception as e:
+            # Unexpected error - this should not happen under normal operation
+            # Log with higher severity and propagate to avoid silent failures
+            logger.error(
+                f"Unexpected error getting session context for {session_id}: {e}"
+            )
+            raise
+    else:
+        # No session, use default context
+        def launch_web_app_for_session(code: str, app_type: str) -> Optional[str]:
+            return launch_web_app(
+                code=code,
+                app_type=app_type,
+                ctx=ctx,
+                logger=logger,
+                resource_manager=resource_manager,
+            )
+
     artifacts_dir = ctx.create_artifacts_dir()
 
     matplotlib_patched = monkey_patch_matplotlib(ctx, logger)
@@ -282,7 +348,7 @@ def execute(
         sys.stderr = stderr_capture
 
         if web_app_type in ["flask", "streamlit"]:
-            url = launch_web_app(code, web_app_type)
+            url = launch_web_app_for_session(code, web_app_type)
             if url:
                 result["web_url"] = url
                 result["stdout"] = f"Web application launched at: {url}"
@@ -438,13 +504,44 @@ def execute_with_artifacts(
     logger: Any,
     persistent_context_factory: Callable[[], Any],
     track_artifacts: bool = True,
+    session_service: Any = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Execute Python code with before/after artifact tracking and reporting.
-    
+
     I4 FIX: Uses lightweight artifact diff mechanism instead of full
     PersistentExecutionContext to avoid DB/dirs/env mutation per call.
+
+    Args:
+        code: Python code to execute.
+        ctx: Execution context (used if no session_id provided).
+        logger: Logger instance.
+        persistent_context_factory: Factory for persistent contexts.
+        track_artifacts: Whether to track artifacts.
+        session_service: Optional session service for per-session context.
+        session_id: Optional session ID for per-session execution.
+
+    Returns:
+        JSON string with execution result and artifact report.
     """
+    # Use per-session context if session_id provided
+    if session_id and session_service:
+        try:
+            # Get or create session-specific execution context (synchronous)
+            ctx = session_service.get_or_create_execution_context_sync(session_id)
+            logger.info(f"Using per-session context for session: {session_id}")
+        except (ImportError, AttributeError, RuntimeError) as e:
+            # Specific exceptions that indicate session service issues
+            logger.warning(
+                f"Session context unavailable for {session_id}, using default: {e}"
+            )
+        except Exception as e:
+            # Unexpected error - log and propagate to avoid silent failures
+            logger.error(
+                f"Unexpected error getting session context for {session_id}: {e}"
+            )
+            raise
     artifacts_dir = ctx.create_artifacts_dir()
 
     matplotlib_patched = monkey_patch_matplotlib(ctx, logger)

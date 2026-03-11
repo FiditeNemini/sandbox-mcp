@@ -13,9 +13,36 @@ from typing import Any
 from .help_text import get_comprehensive_help, get_sandbox_limitations
 
 
-def get_execution_info(ctx: Any) -> str:
-    """Get information about the current execution environment."""
+def get_execution_info(
+    ctx: Any,
+    session_service: Any = None,
+    session_id: str | None = None,
+) -> str:
+    """
+    Get information about the current execution environment.
+
+    Args:
+        ctx: Execution context.
+        session_service: Optional session service for session-specific info.
+        session_id: Optional session ID to query.
+
+    Returns:
+        JSON string with execution information.
+    """
+    # If session_id provided, get session context info
+    if session_id and session_service:
+        try:
+            from ..core.execution_services import ExecutionContext
+            ctx = session_service.get_or_create_execution_context_sync(session_id)
+        except Exception as e:
+            # Fall back to default context on error
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to get session context for {session_id}: {e}"
+            )
+
     info = {
+        "session_id": session_id,
         "project_root": str(ctx.project_root),
         "venv_path": str(ctx.venv_path),
         "venv_active": ctx.venv_path.exists(),

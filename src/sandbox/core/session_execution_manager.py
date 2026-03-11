@@ -21,11 +21,24 @@ logger = logging.getLogger(__name__)
 class SessionExecutionContextManager:
     """
     Manages per-session execution contexts with thread-safe access.
-    
+
     Each session gets its own ExecutionContext with isolated:
     - execution_globals (for variable isolation)
     - artifacts_dir (for file isolation)
     - compilation_cache (for performance isolation)
+
+    NOTE: Process-wide state limitations:
+    This is an in-process session isolation implementation. Certain Python
+    state is SHARED across all sessions in the same process:
+    - sys.path modifications affect all sessions
+    - os.environ modifications affect all sessions
+    - Imported module caches are shared (import once, available everywhere)
+    - Subprocess launches inherit the parent environment
+
+    For full process isolation, consider using:
+    - Separate worker processes per session (see RemoteSandbox)
+    - Container-based isolation (Docker, microVMs)
+    - os.fork() with exec for true process separation
     """
     
     def __init__(self, project_root: Optional[Path] = None):
