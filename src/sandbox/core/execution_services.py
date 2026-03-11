@@ -53,7 +53,7 @@ class ExecutionContext:
             self.project_root = project_root.resolve()
 
         # Validate project_root is within expected boundaries
-        if not self._is_valid_project_root(self.project_root):
+        if not is_safe_path(self.project_root, require_exists=True):
             raise ValueError(f"Invalid project root: {self.project_root}")
 
         # Set up sandbox working area within project root (not parent)
@@ -68,27 +68,6 @@ class ExecutionContext:
         self.compilation_cache: Dict[str, Any] = {}
         self.cache_hits = 0
         self.cache_misses = 0
-
-    def _is_valid_project_root(self, path: Path) -> bool:
-        """Validate that project root is within acceptable boundaries.
-        
-        Security S4: Uses centralized is_safe_path() with is_relative_to().
-        """
-        return is_safe_path(path.resolve(), require_exists=True)
-
-    def _is_valid_path(self, path: str) -> bool:
-        """Validate that a path is safe and within expected boundaries.
-
-        Security S4: Uses centralized is_safe_path() with is_relative_to().
-        """
-        try:
-            path_obj = Path(path).resolve()
-            # Check for path traversal
-            if ".." in path_obj.parts:
-                return False
-            return is_safe_path(path_obj, require_exists=True)
-        except Exception:
-            return False
 
     def _setup_environment(self) -> None:
         """Setup sys.path and virtual environment with robust path detection."""
@@ -356,12 +335,12 @@ class ExecutionContextService:
         # Validate paths before adding to sys.path
         valid_paths = []
         for path in [project_parent_str, project_root_str]:
-            if self._is_valid_path(path):
+            if is_safe_path(Path(path), require_exists=True):
                 valid_paths.append(path)
 
         if venv_site_packages:
             venv_path_str = str(venv_site_packages)
-            if self._is_valid_path(venv_path_str):
+            if is_safe_path(Path(venv_path_str), require_exists=True):
                 valid_paths.append(venv_path_str)
 
         # De-duplicate sys.path using OrderedDict to preserve order
@@ -384,10 +363,10 @@ class ExecutionContextService:
 
             if venv_python.exists():
                 # Validate venv paths before using
-                if not self._is_valid_path(str(context.venv_path)):
+                if not is_safe_path(context.venv_path, require_exists=True):
                     return
 
-                if not self._is_valid_path(str(venv_bin)):
+                if not is_safe_path(venv_bin, require_exists=True):
                     return
 
                 # Set environment variables for venv activation
@@ -402,43 +381,6 @@ class ExecutionContextService:
                 # Update sys.executable to point to venv python
                 sys.executable = str(venv_python)
 
-    def _is_valid_path(self, path: str) -> bool:
-        """Validate that a path is safe and within expected boundaries.
-        
-        Security S4: Uses is_relative_to() instead of startswith() to prevent
-        path traversal attacks via similar prefixes.
-        """
-        try:
-            # Ensure path is absolute and normalized
-            path_obj = Path(path).resolve()
-
-            # Check for path traversal attempts
-            if ".." in path_obj.parts:
-                return False
-
-            # Check that path is within user's home directory or acceptable locations
-            home_dir = Path.home()
-            
-            # SECURITY S4: Use is_relative_to() instead of startswith()
-            if not self._is_path_within_base(path_obj, home_dir):
-                # Allow specific project directories
-                allowed_bases = [
-                    home_dir / "Documents",
-                    home_dir / "Projects",
-                    home_dir / "work",
-                    home_dir / "dev",
-                ]
-                if not any(self._is_path_within_base(path_obj, base) for base in allowed_bases):
-                    return False
-
-            # Check that path exists and is a directory
-            if not path_obj.exists() or not path_obj.is_dir():
-                return False
-
-            return True
-        except Exception:
-            return False
-
     def add_to_path(self, path: str) -> None:
         """
         Add a path to sys.path if not already present.
@@ -446,7 +388,7 @@ class ExecutionContextService:
         Args:
             path: The path to add.
         """
-        if path not in sys.path and self._is_valid_path(path):
+        if path not in sys.path and is_safe_path(Path(path), require_exists=True):
             sys.path.insert(0, path)
 
     async def cleanup(self, context: ExecutionContext) -> None:
