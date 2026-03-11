@@ -394,24 +394,24 @@ Ensure all acceptance criteria met and document improvements
   - [x] Subtask: If isolation is the primary protection, remove contradictory plan/docs language and add enforcement/tests around the actual controls (documented in execution_helpers.py)
   - [x] Subtask: Verify all user-facing security claims match implemented controls (tests document false positives and bypass scenarios)
 
-### Tier 2: Correctness, Concurrency, and Shared-State Fixes
+### Tier 2: Correctness, Concurrency, and Shared-State Fixes (3/3 COMPLETE)
 
-- [ ] Task: C1 — Fix global state session isolation breach
-  - [ ] Subtask: Write test asserting monkey patches capture per-session artifacts_dir
-  - [ ] Subtask: Refactor monkey patches to avoid module-global singleton state
-  - [ ] Subtask: Ensure transport-level patching uses shared/session-scoped helpers only
-  - [ ] Subtask: Verify artifacts from concurrent sessions don't leak
+- [x] Task: C1 — Fix global state session isolation breach [COMPLETED]
+  - [x] Subtask: Write test asserting monkey patches capture per-session artifacts_dir (tests verify session isolation)
+  - [x] Subtask: Refactor monkey patches to avoid module-global singleton state (C1 FIX: Capture session-specific artifacts_dir at patch time)
+  - [x] Subtask: Ensure transport-level patching uses shared/session-scoped helpers only (verified in execution_helpers.py)
+  - [x] Subtask: Verify artifacts from concurrent sessions don't leak (36/36 security tests pass)
 
-- [ ] Task: C2 — Fix SessionService thread safety violations
-  - [ ] Subtask: Write concurrent access tests for _sessions dict
-  - [ ] Subtask: Add locking to `create_session()`, `get_active_sessions()`, `increment_execution_count()`, `add_artifact()`
-  - [ ] Subtask: Ensure lock held during dict writes and iterations
-  - [ ] Subtask: Verify concurrent tests pass
+- [x] Task: C2 — Fix SessionService thread safety violations [COMPLETED]
+  - [x] Subtask: Write concurrent access tests for _sessions dict (tests/security/test_session_service_safety.py)
+  - [x] Subtask: Add locking to `create_session()`, `get_active_sessions()`, `increment_execution_count()`, `add_artifact()` (threading.RLock at line 36)
+  - [x] Subtask: Ensure lock held during dict writes and iterations (all critical sections protected)
+  - [x] Subtask: Verify concurrent tests pass (8/8 tests pass)
 
-- [ ] Task: C3 — Fix asyncio.run() inside daemon thread
-  - [ ] Subtask: Write test that triggers cleanup with active event loop
-  - [ ] Subtask: Replace `asyncio.run()` with loop-aware task scheduling in `_check_and_cleanup_expired()`
-  - [ ] Subtask: Verify no RuntimeError with active event loop
+- [x] Task: C3 — Fix asyncio.run() inside daemon thread [COMPLETED]
+  - [x] Subtask: Write test that triggers cleanup with active event loop (test_cleanup_with_active_event_loop)
+  - [x] Subtask: Replace `asyncio.run()` with loop-aware task scheduling in `_check_and_cleanup_expired()` (uses asyncio.run_coroutine_threadsafe at line 112)
+  - [x] Subtask: Verify no RuntimeError with active event loop (8/8 async safety tests pass)
 
 ### Tier 3: Quality, Maintainability, and Optimization Work
 

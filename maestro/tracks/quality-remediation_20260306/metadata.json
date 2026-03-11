@@ -74,7 +74,10 @@
       "task_s3_backup_name_traversal": "11e32b6",
       "task_s4_prefix_validation": "11e32b6",
       "task_s5_security_model": "documented",
-      "task_s1_symlink_exfiltration": "verified"
+      "task_s1_symlink_exfiltration": "verified",
+      "task_c1_global_state_isolation": "verified",
+      "task_c2_thread_safety": "verified",
+      "task_c3_asyncio_fix": "verified"
     },
     "key_achievements": [
       "Fixed critical syntax error in code_validator.py",
@@ -107,7 +110,11 @@
       "Fixed S2: session_id path traversal validation in PersistentExecutionContext",
       "Fixed S3: backup_name path traversal sanitization in get_backup_info()",
       "Fixed S4: Replaced startswith() with is_relative_to() for path validation",
-      "Fixed S5: Documented isolation-based security model (validator not enforced)"
+      "Fixed S5: Documented isolation-based security model (validator not enforced)",
+      "Phase 10 Tier 2: Correctness, Concurrency, Shared-State - 3/3 COMPLETE (C1, C2, C3)",
+      "Fixed C1: Monkey patches capture session-specific artifacts_dir (no global state leakage)",
+      "Fixed C2: SessionService thread safety with RLock (8/8 tests pass)",
+      "Fixed C3: asyncio.run replaced with run_coroutine_threadsafe (async-safe cleanup)"
     ],
     "tzar_review_completed": true,
     "critical_issues_identified": 5,
@@ -119,8 +126,9 @@
     "started_at": "2026-03-11T01:14:06Z",
     "status": "active",
     "workflow_doc": "docs/quality-remediation-track-tzar-review.md",
-    "tier_0_status": "3/3 COMPLETE (A1, A2, T1 done) - Tier 1 Security Blockers COMPLETE",
-    "tier_1_status": "5/5 COMPLETE (S1, S2, S3, S4, S5 all done) - Tier 2 Ready to Start",
+    "tier_0_status": "3/3 COMPLETE (A1, A2, T1 done)",
+    "tier_1_status": "5/5 COMPLETE (S1, S2, S3, S4, S5 all done)",
+    "tier_2_status": "3/3 COMPLETE (C1, C2, C3 all done) - Tier 3 Ready to Start",
     "blocking_order": [
       "Tier 0: Architecture Blockers",
       "Tier 1: Security Blockers",
