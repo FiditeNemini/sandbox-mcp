@@ -16,8 +16,10 @@ from typing import Any, Dict, List, Optional
 
 from .base_sandbox import BaseSandbox
 from .execution import Execution
+from .config import SandboxConfig, IsolationLevel
 from ..core.execution_context import PersistentExecutionContext
 from ..core.patching import get_patch_manager
+from ..core.worktree_manager import WorktreeManager, find_git_repo
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +29,23 @@ class LocalSandbox(BaseSandbox):
     Local sandbox implementation that uses the existing MCP server functionality.
 
     This provides secure local execution with artifact capture and virtual environment support.
+    Supports multiple isolation levels: in-process, process pool, worktree, and container.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, config: Optional[SandboxConfig] = None, **kwargs):
         """
         Initialize a local sandbox instance.
+
+        Args:
+            config: SandboxConfig with isolation settings
+            **kwargs: Additional keyword arguments passed to BaseSandbox
         """
         # Force remote=False for local sandboxes
         kwargs["remote"] = False
         super().__init__(**kwargs)
+
+        # Store config for isolation settings
+        self._config = config or SandboxConfig()
 
         # Initialize local execution context with persistence
         self._execution_context = PersistentExecutionContext()
@@ -45,6 +55,15 @@ class LocalSandbox(BaseSandbox):
         patch_manager = get_patch_manager()
         patch_manager.patch_matplotlib()
         patch_manager.patch_pil()
+
+        # Process pool for isolated execution (lazy loaded)
+        self._process_pool = None
+
+        # Worktree isolation support
+        self._worktree_manager: Optional[WorktreeManager] = None
+        self._worktree_path: Optional[Path] = None
+        self._worktree_branch: Optional[str] = None
+        self._original_cwd: Optional[Path] = None
 
     async def get_default_image(self) -> str:
         """
@@ -61,28 +80,143 @@ class LocalSandbox(BaseSandbox):
     ) -> None:
         """
         Start the local sandbox.
-        
+
         For local sandboxes, this primarily sets up the execution environment.
+        If worktree isolation is enabled, creates a git worktree for this session.
         """
         if self._is_started:
             return
-            
+
+        # Setup worktree isolation if configured
+        if self._config.isolation_level == IsolationLevel.WORKTREE:
+            await self._setup_worktree()
+
         # Already set up in PersistentExecutionContext
         # No additional setup needed for persistent context
-        
+
         self._is_started = True
+
+    async def _setup_worktree(self) -> None:
+        """
+        Setup worktree-based isolation.
+
+        Creates a git worktree for the session and updates the working directory.
+        """
+        repo_root = find_git_repo()
+        if repo_root is None:
+            raise ValueError(
+                "Worktree isolation requires a git repository. "
+                "Initialize one with 'git init' or run from within an existing repo."
+            )
+
+        self._worktree_manager = WorktreeManager(repo_root)
+
+        try:
+            worktree_path, branch = self._worktree_manager.create_worktree(
+                session_id=self._name,
+                base_branch=self._config.worktree_base_branch,
+            )
+
+            self._worktree_path = worktree_path
+            self._worktree_branch = branch
+            self._original_cwd = Path.cwd()
+
+            logger.info(
+                f"Created worktree for sandbox: {worktree_path} "
+                f"(branch: {branch})"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to setup worktree: {e}")
+            raise
+
+    async def _cleanup_worktree(self) -> None:
+        """
+        Cleanup worktree after session.
+
+        Handles merging and deletion based on configuration.
+        """
+        if self._worktree_manager is None:
+            return
+
+        try:
+            # Check if there are changes
+            status = self._worktree_manager.get_worktree_status(self._name)
+
+            if status.get("has_changes"):
+                if self._config.auto_merge_on_close:
+                    # Commit changes first
+                    self._worktree_manager.commit_worktree_changes(
+                        self._name,
+                        message=self._config.worktree_commit_message
+                        or f"Sandbox session: {self._name}",
+                    )
+
+                    # Merge back to main branch
+                    target_branch = (
+                        self._config.worktree_base_branch
+                        or self._worktree_manager._get_current_branch()
+                        or "main"
+                    )
+                    success = self._worktree_manager.merge_worktree(
+                        session_id=self._name,
+                        target_branch=target_branch,
+                        delete_after=self._config.auto_delete_worktree,
+                        commit_message=self._config.worktree_commit_message,
+                    )
+
+                    if success:
+                        logger.info(f"Merged worktree changes to {target_branch}")
+                    else:
+                        logger.warning(
+                            f"Failed to merge worktree, keeping it for manual review"
+                        )
+                        self._worktree_manager.delete_worktree(self._name)
+                elif self._config.auto_delete_worktree:
+                    # Just delete without merging
+                    self._worktree_manager.delete_worktree(self._name)
+                    logger.info(f"Deleted worktree without merging")
+                else:
+                    # Leave worktree for manual review
+                    logger.info(
+                        f"Worktree preserved at: {self._worktree_path} "
+                        f"(branch: {self._worktree_branch})"
+                    )
+            elif self._config.auto_delete_worktree:
+                # No changes, just delete
+                self._worktree_manager.delete_worktree(self._name)
+
+        except Exception as e:
+            logger.error(f"Error during worktree cleanup: {e}")
+        finally:
+            self._worktree_manager = None
+            self._worktree_path = None
+            self._worktree_branch = None
+            self._original_cwd = None
 
     async def stop(self) -> None:
         """
         Stop the local sandbox and clean up resources.
+
+        If worktree isolation was enabled, handles merge/deletion based on config.
+        If process pool was used, cleans up the process pool.
         """
         if not self._is_started:
             return
-            
+
+        # Clean up process pool if using process pool isolation
+        if self._process_pool is not None:
+            self._process_pool.cleanup()
+            self._process_pool = None
+
+        # Clean up worktree if enabled
+        if self._config.isolation_level == IsolationLevel.WORKTREE:
+            await self._cleanup_worktree()
+
         # Clean up artifacts if needed
         # Note: We might want to preserve artifacts for user access
         # self._execution_context.cleanup_artifacts()
-        
+
         self._is_started = False
 
     async def run(self, code: str, validate: bool = True) -> Execution:
@@ -102,16 +236,33 @@ class LocalSandbox(BaseSandbox):
         if not self._is_started:
             raise RuntimeError("Sandbox is not started. Call start() first.")
 
+        # Route to appropriate execution method based on isolation level
+        if self._config.isolation_level == IsolationLevel.PROCESS_POOL:
+            return await self._run_in_process_pool(code, validate=validate)
+        else:
+            return await self._run_in_process(code, validate=validate)
+
+    async def _run_in_process(self, code: str, validate: bool = True) -> Execution:
+        """
+        Execute code in the current process (default behavior).
+
+        Args:
+            code: Python code to execute
+            validate: Whether to validate code before execution
+
+        Returns:
+            An Execution object representing the executed code
+        """
         # Use the enhanced persistent execution context with validation
         import hashlib
         cache_key = hashlib.md5(code.encode()).hexdigest()
-        
+
         result = self._execution_context.execute_code(
-            code, 
-            cache_key=cache_key, 
+            code,
+            cache_key=cache_key,
             validate=validate
         )
-        
+
         # Create and return execution result with enhanced information
         execution = Execution(
             stdout=result.get('stdout', ''),
@@ -120,12 +271,65 @@ class LocalSandbox(BaseSandbox):
             exception=Exception(result['error']) if result.get('error') else None,
             artifacts=result.get('artifacts', []),
         )
-        
+
         # Add validation result to execution if available
         if result.get('validation_result'):
             execution._validation_result = result['validation_result']
-        
+
         return execution
+
+    async def _run_in_process_pool(self, code: str, validate: bool = True) -> Execution:
+        """
+        Execute code in an isolated process from the process pool.
+
+        Provides process-level isolation to prevent module pollution between
+        executions while keeping resource usage capped.
+
+        Args:
+            code: Python code to execute
+            validate: Whether to validate code before execution
+
+        Returns:
+            An Execution object representing the executed code
+        """
+        from ..core.process_pool import get_process_pool
+        from ..core.code_validator import CodeValidator
+
+        # Validate code if requested
+        if validate:
+            validator = CodeValidator()
+            validation_result = validator.validate_and_format(code)
+            if not validation_result.get('valid', True):
+                # Extract error message from issues
+                issues = validation_result.get('issues', [])
+                error_msg = '; '.join(issues) if issues else 'Code validation failed'
+                return Execution(
+                    stdout='',
+                    stderr=error_msg,
+                    exception=Exception(error_msg),
+                )
+
+        # Get or create process pool
+        if self._process_pool is None:
+            self._process_pool = get_process_pool(max_workers=self._config.max_workers)
+
+        # Execute in isolated process
+        result = self._process_pool.execute_isolated(
+            code=code,
+            session_id=self._name,
+            artifacts_dir=str(self._execution_context.artifacts_dir or '/tmp/sandbox-artifacts'),
+            timeout=self._config.timeout,
+            memory_limit_mb=self._config.memory_limit_mb,
+        )
+
+        # Create and return execution result
+        return Execution(
+            stdout=result.get('output', ''),
+            stderr=result.get('error', ''),
+            return_value=None,
+            exception=Exception(result['error']) if result.get('error') else None,
+            artifacts=result.get('artifacts', []),
+        )
 
     @property
     def artifacts_dir(self) -> Optional[str]:

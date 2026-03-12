@@ -69,7 +69,34 @@ uv run sandbox-server-stdio
 - **Guarded Execution**: Code runs with resource limits and timeouts
 - **Timeout Control**: Configurable execution limits (default 30s)
 - **Resource Monitoring**: Memory and CPU usage tracking
+- **Multiple Isolation Levels**: In-process, process pool, worktree, and container
 - **Note**: This is a *guarded execution environment*, not a strongly isolated sandbox. For production use with untrusted code, consider running in a container or VM.
+
+### 🛡️ **Isolation Levels**
+Choose the right isolation level for your use case:
+
+| Level | Isolation | Performance | Use Case |
+|-------|-----------|-------------|----------|
+| **In-Process** | Session globals only | ⭐⭐⭐⭐⭐ | Single LLM, trusted code |
+| **Process Pool** | Process-level module isolation | ⭐⭐⭐⭐ | Multiple LLMs, resource limits |
+| **Worktree** | Filesystem isolation via git | ⭐⭐⭐ | Parallel development workflows |
+| **Container** | Full OS-level isolation | ⭐⭐ | Untrusted code, production |
+
+**Process Pool Example:**
+```python
+from sandbox.sdk import LocalSandbox, SandboxConfig, IsolationLevel
+
+config = SandboxConfig(
+    isolation_level=IsolationLevel.PROCESS_POOL,
+    max_workers=4,
+    memory_limit_mb=256,
+)
+
+async with LocalSandbox.create(name="my-session", config=config) as sandbox:
+    result = await sandbox.run("print('Isolated execution')")
+```
+
+See [SECURITY.md](SECURITY.md) for detailed threat model and isolation strategies.
 
 ### 🔌 **MCP Integration**
 - **Dual Transport**: HTTP and stdio support
@@ -591,6 +618,25 @@ FastMCP-powered server with:
 - **Tool Registry**: 7 available MCP tools
 - **Streaming Support**: Ready for real-time interaction
 - **Error Handling**: Structured error responses
+
+## 🔒 Security Model
+
+**Important**: Sandbox MCP is designed for **single-user development scenarios**, not multi-tenant production use.
+
+### What It Provides
+✅ Isolated execution contexts for LLM code generation
+✅ Artifact management and capture
+✅ Path traversal prevention
+✅ Session isolation
+
+### What It Does NOT Provide
+❌ Multi-tenant isolation
+❌ Protection against malicious code
+❌ Process-level security boundaries
+
+For production use or multi-tenant scenarios, use **RemoteSandbox** with container isolation.
+
+See [SECURITY.md](SECURITY.md) for complete threat model.
 
 ## 📚 Documentation
 

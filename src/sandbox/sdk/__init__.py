@@ -22,10 +22,11 @@ else:
 # Core classes - always available
 from .base_sandbox import BaseSandbox
 from .local_sandbox import LocalSandbox
+from .worktree_sandbox import WorktreeSandbox
 from .execution import Execution
 from .command import Command
 from .metrics import Metrics
-from .config import SandboxConfig, SandboxOptions
+from .config import SandboxConfig, SandboxOptions, IsolationLevel
 
 # Lazy imports for optional features
 from ..utils.lazy_imports import LazyClass
@@ -60,6 +61,7 @@ CommandExecution = LazyClass(
 __all__ = [
     "BaseSandbox",
     "LocalSandbox",
+    "WorktreeSandbox",
     "RemoteSandbox",
     "NodeSandbox",
     "PythonSandbox",
@@ -69,5 +71,6 @@ __all__ = [
     "Metrics",
     "SandboxConfig",
     "SandboxOptions",
+    "IsolationLevel",
     "__version__",
 ]
