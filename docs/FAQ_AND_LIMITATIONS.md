@@ -23,7 +23,7 @@ A: Core libraries include:
 - `jupyter` - Interactive computing
 
 **Q: Can I install additional packages?**
-A: Yes, while all commonly needed packages are pre-installed, the install commands can be used to safely install packaged that do not require sudo permissions.
+A: Yes, while all commonly needed packages are pre-installed, the install commands can be used to safely install packages that do not require sudo permissions.
 
 ### 2. Code Execution
 

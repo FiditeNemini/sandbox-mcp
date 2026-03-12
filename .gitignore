@@ -33,19 +33,10 @@ Thumbs.db
 *.log
 logs/
 
-# Test files and personal configs
-test_*.py
+# Personal test/development files (not committed)
 debug_*.py
-*-config.json
-*config.json
-system-prompts.md
-complete-system-prompt.md
-manim-latex-setup-summary.md
-media/
-test_artifact/
-*.aux
-*.dvi
 test.log
+test_artifact/
 
 # Allow example videos
 !examples/*.mp4
@@ -57,3 +48,19 @@ test.log
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+
+# Coverage reports
+.coverage
+coverage.json
+coverage_output.txt
+htmlcov/
+.coverage.*
+
+# Maestro & LeIndex (never commit these)
+.claude/
+.leindex/
+.omx/
+.mcp.json
+
+# Development-only docs (keep local, never push)
+COVERAGE_GAP_ANALYSIS.md

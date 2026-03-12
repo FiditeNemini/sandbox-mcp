@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from .command import Command
 from .metrics import Metrics
+from .config import SandboxConfig
 
 
 class BaseSandbox(ABC):
@@ -78,6 +79,8 @@ class BaseSandbox(ABC):
         namespace: str = "default",
         name: Optional[str] = None,
         api_key: Optional[str] = None,
+        config: Optional[SandboxConfig] = None,
+        **kwargs,
     ):
         """
         Create and initialize a new sandbox within an async context manager.
@@ -88,17 +91,25 @@ class BaseSandbox(ABC):
             namespace: Namespace for the sandbox
             name: Optional name for the sandbox
             api_key: API key for authentication for remote sandboxes
+            config: Optional SandboxConfig for advanced configuration
+            **kwargs: Additional keyword arguments passed to subclass
 
         Returns:
             An instance of the sandbox ready for use
         """
-        sandbox = cls(
-            remote=remote,
-            server_url=server_url,
-            namespace=namespace,
-            name=name,
-            api_key=api_key,
-        )
+        # Pass config to subclass if supported
+        init_kwargs = {
+            "remote": remote,
+            "server_url": server_url,
+            "namespace": namespace,
+            "name": name,
+            "api_key": api_key,
+        }
+        if config is not None:
+            init_kwargs["config"] = config
+        init_kwargs.update(kwargs)
+
+        sandbox = cls(**init_kwargs)
         try:
             await sandbox.start()
             yield sandbox

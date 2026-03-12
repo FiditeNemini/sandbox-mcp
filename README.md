@@ -1,11 +1,15 @@
-# Enhanced Sandbox SDK
+# Sandbox MCP
 
-> Python sandbox execution environment with comprehensive MCP server support, featuring enhanced artifact management, interactive REPL, and Manim animation capabilities.
+<!-- mcp-name: io.github.scooter-lacroix/sandbox-mcp -->
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+> General-purpose Python execution sandbox for MCP clients, with persistent execution, artifact capture, Manim rendering, guarded shell access, and lightweight web app workflows.
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.10.5-green.svg)](https://github.com/jlowin/fastmcp)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![MCP Badge](https://lobehub.com/badge/mcp/scooter-lacroix-sandbox-mcp)](https://lobehub.com/mcp/scooter-lacroix-sandbox-mcp)
+
+Sandbox MCP is designed to stay broadly useful across coding assistants and MCP directories. It can run Python, generate plots and files, render Manim animations, launch or export small Flask/Streamlit demos, and expose prompts/resources that help an LLM discover how to use the sandbox well.
 
 ## 🎬 Demo: Manim Animation in Action
 
@@ -62,36 +66,88 @@ uv run sandbox-server-stdio
 - **URL Generation**: Returns accessible endpoints
 
 ### 🔒 **Security & Safety**
-- **Command Filtering**: Blocks dangerous operations
-- **Sandboxed Execution**: Isolated environment
-- **Timeout Control**: Configurable execution limits
+- **Command Filtering**: Blocks dangerous shell commands (configurable)
+- **Guarded Execution**: Code runs with resource limits and timeouts
+- **Timeout Control**: Configurable execution limits (default 30s)
 - **Resource Monitoring**: Memory and CPU usage tracking
+- **Multiple Isolation Levels**: In-process, process pool, worktree, and container
+- **Note**: This is a *guarded execution environment*, not a strongly isolated sandbox. For production use with untrusted code, consider running in a container or VM.
+
+### 🛡️ **Isolation Levels**
+Choose the right isolation level for your use case:
+
+| Level | Isolation | Performance | Use Case |
+|-------|-----------|-------------|----------|
+| **In-Process** | Session globals only | ⭐⭐⭐⭐⭐ | Single LLM, trusted code |
+| **Process Pool** | Process-level module isolation | ⭐⭐⭐⭐ | Multiple LLMs, resource limits |
+| **Worktree** | Filesystem isolation via git | ⭐⭐⭐ | Parallel development workflows |
+| **Container** | Full OS-level isolation | ⭐⭐ | Untrusted code, production |
+
+**Process Pool Example:**
+```python
+from sandbox.sdk import LocalSandbox, SandboxConfig, IsolationLevel
+
+config = SandboxConfig(
+    isolation_level=IsolationLevel.PROCESS_POOL,
+    max_workers=4,
+    memory_limit_mb=256,
+)
+
+async with LocalSandbox.create(name="my-session", config=config) as sandbox:
+    result = await sandbox.run("print('Isolated execution')")
+```
+
+See [SECURITY.md](SECURITY.md) for detailed threat model and isolation strategies.
 
 ### 🔌 **MCP Integration**
 - **Dual Transport**: HTTP and stdio support
 - **LM Studio Ready**: Drop-in AI model integration
 - **FastMCP Powered**: Modern MCP implementation
-- **Comprehensive Tools**: 12+ available MCP tools
+- **Discoverable Interface Surface**: Tools, prompts, resources, skills, and interactive templates
 
 ## 📦 Installation
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.11+
 - uv (recommended) or pip
 
-### Method 1: Direct Git Installation (Recommended)
+### Method 1: Install from PyPI (Recommended)
 
-For immediate use with AI applications like LM Studio, Claude Desktop, or VS Code:
+Install the latest stable release from PyPI:
 
 ```bash
-uvx git+https://github.com/scooter-lacroix/sandbox-mcp.git
+# Using uv (fastest)
+uv pip install sandbox-mcp
+
+# Or using pip
+pip install sandbox-mcp
 ```
 
-This automatically installs and runs the MCP server without manual setup.
+For immediate use with AI applications:
 
-### Method 2: Local Development Installation
+```bash
+# Run directly with uvx
+uvx sandbox-mcp
+```
 
-For development, customization, or contributing:
+### Method 2: Direct Git Installation
+
+For the latest development version:
+
+```bash
+# Using uv
+uvx git+https://github.com/scooter-lacroix/sandbox-mcp.git
+
+# Or clone and install
+git clone https://github.com/scooter-lacroix/sandbox-mcp.git
+cd sandbox-mcp
+uv venv
+uv pip install -e .
+```
+
+### Method 3: Development Installation
+
+For contributing or customization:
 
 #### Using uv (Recommended)
 
@@ -99,7 +155,7 @@ For development, customization, or contributing:
 git clone https://github.com/scooter-lacroix/sandbox-mcp.git
 cd sandbox-mcp
 uv venv
-uv pip install -e .
+uv pip install -e ".[dev]"
 ```
 
 #### Using pip
@@ -108,23 +164,28 @@ uv pip install -e .
 git clone https://github.com/scooter-lacroix/sandbox-mcp.git
 cd sandbox-mcp
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate  # Windows
-pip install -e .
+# On Linux/Mac:
+source .venv/bin/activate
+# On Windows:
+# .venv\\Scripts\\activate
+pip install -e ".[dev]"
 ```
 
-### Method 3: Package Installation
-
-Install from package manager (when available):
+### Verify Installation
 
 ```bash
-# Using uv
-uvx sandbox-mcp
+# Check version
+sandbox-mcp --version
 
-# Using pip
-pip install sandbox-mcp
+# Test HTTP server
+sandbox-server --help
+
+# Test stdio server
+sandbox-mcp --help
 ```
 
+
+## 🖥️ Usage
 ## 🖥️ Usage
 
 ### Command Line Interface
@@ -134,6 +195,9 @@ pip install sandbox-mcp
 sandbox-server
 
 # Start stdio server (LM Studio integration)
+sandbox-mcp
+
+# Backward-compatible stdio alias
 sandbox-server-stdio
 ```
 
@@ -246,6 +310,8 @@ Then configure your application:
 
 ### Available MCP Tools
 
+Sandbox MCP exposes a broader tool surface than the quick table below. For the machine-readable catalog used by marketplace-style listings, see [`docs/marketplace-profile.json`](docs/marketplace-profile.json).
+
 | Tool | Description |
 |------|-------------|
 | `execute` | Execute Python code with artifact capture |
@@ -260,6 +326,33 @@ Then configure your application:
 | `list_manim_animations` | List all created Manim animations |
 | `cleanup_manim_animation` | Clean up specific animation files |
 | `get_manim_examples` | Get example Manim code snippets |
+
+### Skills, Prompts, and Resources
+
+- **Skill**: `manim_storyboard_skill` turns a concept into a storyboard, ready-to-render Manim code, and a suggested sandbox workflow.
+- **Interactive template**: `manim_scene_template` creates a focused Manim scene from a concept, duration target, and quality preset.
+- **Interactive template**: `sandbox_example_template` creates runnable artifact-focused examples for plots, images, tables, or generated files.
+- **Interactive template**: `sandbox_web_app_template` creates small Flask or Streamlit demos ready for `start_web_app` or `export_web_app`.
+- **Resource**: `sandbox://server/overview` exposes a succinct server summary and capability map.
+- **Resource**: `sandbox://catalog/interfaces` exposes a machine-readable list of tools, prompts, resources, skills, and templates.
+
+### Hosted Deployment Notes
+
+For local IDE assistants, use `sandbox-server-stdio`. For remote or directory-hosted use cases such as MCPHub-compatible listings, run the HTTP server behind TLS and authentication, then point clients at the Streamable HTTP endpoint:
+
+```bash
+python -m sandbox.mcp_sandbox_server
+
+# Optional for hosted deployments
+SANDBOX_MCP_HOST=0.0.0.0 SANDBOX_MCP_PORT=8765 python -m sandbox.mcp_sandbox_server
+```
+
+Deployment checklist:
+- Put the HTTP transport behind a reverse proxy or ingress that terminates TLS.
+- Add authentication before exposing the server outside a trusted network.
+- Treat this as a guarded execution environment, not a hardened isolation boundary.
+- Use `export_web_app` and `build_docker_image` when you want to turn sandbox-generated demos into deployable examples.
+- Keep marketplace metadata in sync with [`docs/marketplace-profile.json`](docs/marketplace-profile.json) and deployment notes in [`docs/marketplace.md`](docs/marketplace.md).
 
 ## 💡 Examples
 
@@ -555,6 +648,25 @@ FastMCP-powered server with:
 - **Tool Registry**: 7 available MCP tools
 - **Streaming Support**: Ready for real-time interaction
 - **Error Handling**: Structured error responses
+
+## 🔒 Security Model
+
+**Important**: Sandbox MCP is designed for **single-user development scenarios**, not multi-tenant production use.
+
+### What It Provides
+✅ Isolated execution contexts for LLM code generation
+✅ Artifact management and capture
+✅ Path traversal prevention
+✅ Session isolation
+
+### What It Does NOT Provide
+❌ Multi-tenant isolation
+❌ Protection against malicious code
+❌ Process-level security boundaries
+
+For production use or multi-tenant scenarios, use **RemoteSandbox** with container isolation.
+
+See [SECURITY.md](SECURITY.md) for complete threat model.
 
 ## 📚 Documentation
 
